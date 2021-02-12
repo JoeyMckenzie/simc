@@ -81,6 +81,7 @@ enum
   // Shadowlands: Curves used to apply diminishing returns to Combat Ratings
   DIMINISHING_RETURN_SECONDARY_CR_CURVE = 21024u,
   DIMINISHING_RETURN_TERTIARY_CR_CURVE = 21025u,
+  DIMINISHING_RETURN_VERS_MITIG_CR_CURVE  = 21035u,
 };
 
 // Enable/Disable azerite effects
@@ -533,7 +534,8 @@ enum special_effect_source_e
   SPECIAL_EFFECT_SOURCE_AZERITE,
   SPECIAL_EFFECT_SOURCE_AZERITE_ESSENCE,
   SPECIAL_EFFECT_SOURCE_SOULBIND,
-  SPECIAL_EFFECT_SOURCE_FALLBACK
+  SPECIAL_EFFECT_SOURCE_FALLBACK,
+  SPECIAL_EFFECT_SOURCE_TEMPORARY_ENCHANT
 };
 
 enum special_effect_buff_e
@@ -963,7 +965,9 @@ enum stat_e
   STAT_WEAPON_DPS,
   STAT_WEAPON_OFFHAND_DPS,
   STAT_ALL,
-  STAT_MAX
+  STAT_MAX,
+  
+  STAT_ANY_DPS, // Only for use with buff_has_stat() queries
 };
 #define check( x )                                                             \
   static_assert( static_cast<int>( STAT_##x ) == static_cast<int>( ATTR_##x ), \

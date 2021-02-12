@@ -5,7 +5,7 @@ from collections import defaultdict
 import dbc.db, dbc.data, dbc.parser, dbc.file
 
 from dbc import constants, util
-from dbc.filter import ActiveClassSpellSet, PetActiveSpellSet, RacialSpellSet, MasterySpellSet, RankSpellSet, ConduitSet, SoulbindAbilitySet, CovenantAbilitySet, TalentSet
+from dbc.filter import ActiveClassSpellSet, PetActiveSpellSet, RacialSpellSet, MasterySpellSet, RankSpellSet, ConduitSet, SoulbindAbilitySet, CovenantAbilitySet, TalentSet, TemporaryEnchantItemSet
 
 # Special hotfix field_id value to indicate an entry is new (added completely through the hotfix entry)
 HOTFIX_MAP_NEW_ENTRY  = 0xFFFFFFFF
@@ -1260,6 +1260,20 @@ class SpellDataGenerator(DataGenerator):
          347662, 347665, # Damage Reduction bonuses
          # Anima Field for Anima Field Emitter trinket
          345535,
+         # Hateful Chain
+         345364, 345361,
+         # Shadowgrasp Totem damage
+         331537,
+         # Hymnal of the Path damage/healing spells
+         348141, 348140,
+         # Mistcaller Ocarina
+         330132, 332077, 332078, 332079,
+         # Skulking Predator leap/damage
+         345020,
+         # Tablet of Despair
+         336183,
+         # Rotbriar Sprout
+         329548,
         ),
 
         # Warrior:
@@ -1428,6 +1442,10 @@ class SpellDataGenerator(DataGenerator):
             ( 346112, 0 ),          # Shadow Weaving Mastery Pet Proc spell
             ( 336167, 0 ),          # Painbreaker Psalm Insanity generation
             ( 341207, 0 ),          # Dark Thoughts Buff
+            ( 344753, 0 ),          # Eternal Call to the Void Parent spell
+            ( 336373, 0 ),          # Cauterizing Shadows heal spell
+            ( 323707, 0 ),          # Mindgames Healing reversal Damage spell
+            ( 323706, 0 ),          # Mindgames Damage reversal Healing spell
             # Holy Priest
             ( 196809, 5 ),          # Healing Light (Divine Image legendary pet spell)
             ( 196810, 5 ),          # Dazzling Light (Divine Image legendary pet spell)
@@ -1469,7 +1487,9 @@ class SpellDataGenerator(DataGenerator):
           ( 302656, 0 ), # Vision of Perfection's resource generation for Frost DK
           ( 317791, 5 ), ( 317792, 5), # Magus of the Dead's (army of the damned talent) Frostbolt and Shadow Bolt spells
           ( 324165, 0 ), # Night Fae's Death's Due Strength Buff
-
+          ( 220890, 5 ), # Dancing Rune Weapon's RP generation spell from Heart Strike
+          ( 334895, 5 ), # Frenzied Monstrosity Buff that appears on the main ghoul pet (different from the player buff)
+          ( 193486, 0 ), # Runic Empowerment energize spell
         ),
 
         # Shaman:
@@ -1999,6 +2019,7 @@ class SpellDataGenerator(DataGenerator):
 
     # Effect subtype, field name
     _label_whitelist = [
+        ( 143, 'misc_value_1' ),
         ( 218, 'misc_value_2' ),
         ( 219, 'misc_value_2' ),
     ]
@@ -2546,6 +2567,21 @@ class SpellDataGenerator(DataGenerator):
         # Explicitly add Shadowlands legendaries
         for entry in self.db('RuneforgeLegendaryAbility').values():
             self.process_spell(entry.id_spell, ids, 0, 0)
+
+        # Temporary item enchants
+        for item, spell, enchant_id in TemporaryEnchantItemSet(self._options).get():
+            enchant = self.db('SpellItemEnchantment')[enchant_id]
+            enchant_spells = []
+            for index in range(1, 4):
+                type_ = getattr(enchant, 'type_{}'.format(index))
+                prop_ = getattr(enchant, 'id_property_{}'.format(index))
+                if type_ in [1, 3, 7] and prop_:
+                    enchant_spell = self.db('SpellName')[prop_]
+                    if enchant_spell.id != 0:
+                        enchant_spells.append(self.db('SpellName')[prop_])
+
+            for s in [spell] + enchant_spells:
+                self.process_spell(s.id, ids, 0, 0)
 
         # Last, get the explicitly defined spells in _spell_id_list on a class basis and the
         # generic spells from SpellDataGenerator._spell_id_list[0]
@@ -3341,7 +3377,8 @@ class SpellItemEnchantmentGenerator(DataGenerator):
                 fields += self.db('ItemSparse').default().field('id')
 
             fields += data.field('scaling_type', 'min_scaling_level', 'max_scaling_level',
-                                 'req_skill', 'req_skill_value')
+                                 'min_item_level', 'max_item_level', 'req_skill',
+                                 'req_skill_value')
             fields += [ '{ %s }' % ', '.join(data.field('type_1', 'type_2', 'type_3')) ]
             fields += [ '{ %s }' % ', '.join(
                 data.field('amount_1', 'amount_2', 'amount_3')) ]
@@ -4027,6 +4064,26 @@ class CovenantAbilityGenerator(DataGenerator):
             fields += entry.field('ability_type')
             fields += entry.ref('id_spell').field('id', 'name')
 
+            self.output_record(fields)
+
+        self.output_footer()
+
+class TemporaryEnchantItemGenerator(DataGenerator):
+    def filter(self):
+        return TemporaryEnchantItemSet(self._options).get()
+
+    def generate(self, data=None):
+
+        self.output_header(
+                header = 'Temporary item enchants',
+                type = 'temporary_enchant_entry_t',
+                array = 'temporary_enchant',
+                length = len(data))
+
+        for item, spell, enchant_id in sorted(data, key = lambda v: (v[0].name, v[2])):
+            fields = ['{:5d}'.format(enchant_id)]
+            fields += spell.field('id')
+            fields += ['{:30s}'.format('"{}"'.format(util.tokenize(item.name)))]
             self.output_record(fields)
 
         self.output_footer()

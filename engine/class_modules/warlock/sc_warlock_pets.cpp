@@ -156,20 +156,6 @@ double warlock_pet_t::composite_player_multiplier( school_e school ) const
 {
   double m = pet_t::composite_player_multiplier( school );
 
-  if ( o()->specialization() == WARLOCK_DEMONOLOGY )
-  {
-    m *= 1.0 + o()->cache.mastery_value();
-
-    if ( o()->buffs.demonic_power->check() )
-      m *= 1.0 + o()->buffs.demonic_power->default_value;
-
-    if ( o()->buffs.tyrants_soul->check() )
-      m *= 1.0 + o()->buffs.tyrants_soul->current_value;
-
-    if ( o()->buffs.soul_tithe->check() )
-      m *= 1.0 + o()->buffs.soul_tithe->check_stack_value();
-  }
-
   m *= 1.0 + buffs.grimoire_of_service->check_value();
 
   if ( pet_type == PET_FELGUARD && o()->conduit.fel_commando->ok() )
@@ -673,22 +659,15 @@ struct fel_firebolt_t : public warlock_pet_spell_t
 
     warlock_pet_spell_t::schedule_execute( execute_state );
 
-    if ( p()->o()->buffs.demonic_power->check() && p()->resources.current[ RESOURCE_ENERGY ] < 100 )
-    {
-      demonic_power_on_cast_start = true;
-    }
-    else
-    {
-      demonic_power_on_cast_start = false;
-    }
+    demonic_power_on_cast_start = p()->o()->buffs.demonic_power->check() && p()->resources.current[ RESOURCE_ENERGY ] < 100;
   }
 
   void consume_resource() override
   {
     warlock_pet_spell_t::consume_resource();
 
-    // Imp dies if it reaches zero energy
-    if ( player->resources.current[ RESOURCE_ENERGY ] == 0 )
+    // Imp dies if it cannot cast
+    if ( player->resources.current[ RESOURCE_ENERGY ] < cost() )
     {
       make_event( sim, timespan_t::zero(), [ this ]() { player->cast_pet()->dismiss(); } );
     }
@@ -870,6 +849,11 @@ struct dreadstalker_melee_t : warlock_pet_melee_t
     {
       p()->dreadbite_executes++;
       p()->o()->procs.carnivorous_stalkers->occur();
+      if ( p()->readying )
+      {
+        event_t::cancel( p()->readying );
+        p()->schedule_ready();
+      }
     }
   }
 };
@@ -878,9 +862,12 @@ dreadstalker_t::dreadstalker_t( warlock_t* owner ) : warlock_pet_t( owner, "drea
 {
   action_list_str        = "travel/dreadbite";
   resource_regeneration  = regen_type::DISABLED;
-  owner_coeff.ap_from_sp = 0.4;
-  // TOCHECK hotfix live as of 10-02-2018. https://us.battle.net/forums/en/wow/topic/20769527059
-  owner_coeff.ap_from_sp *= 1.15;
+  // owner_coeff.ap_from_sp = 0.4;
+  // The above is the base value that was originally used
+  // A hotfix live as of 10-02-2018 increased this by 15%. https://us.battle.net/forums/en/wow/topic/20769527059
+  // checking against beta/live on 2020-12-01 revealed that dreadstalkers were under by an additional 20%
+  // This means current value should be 0.552
+  owner_coeff.ap_from_sp = 0.552;
   owner_coeff.health = 0.4;
 }
 
@@ -1083,7 +1070,7 @@ struct multi_slash_t : public warlock_pet_melee_attack_t
 shivarra_t::shivarra_t( warlock_t* owner ) : warlock_simple_pet_t( owner, "shivarra", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "travel/multi_slash";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1127,7 +1114,7 @@ struct fel_bite_t : public warlock_pet_melee_attack_t
 darkhound_t::darkhound_t( warlock_t* owner ) : warlock_simple_pet_t( owner, "darkhound", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "travel/fel_bite";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1165,7 +1152,7 @@ struct toxic_bile_t : public warlock_pet_spell_t
 bilescourge_t::bilescourge_t( warlock_t* owner ) : warlock_simple_pet_t( owner, "bilescourge", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "toxic_bile";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1193,7 +1180,7 @@ struct many_faced_bite_t : public warlock_pet_melee_attack_t
 urzul_t::urzul_t( warlock_t* owner ) : warlock_simple_pet_t( owner, "urzul", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "travel/many_faced_bite";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1237,8 +1224,8 @@ struct double_breath_t : public warlock_pet_spell_t
 
   double_breath_t( warlock_pet_t* p ) : warlock_pet_spell_t( "double_breath", p, p->find_spell( 272156 ) )
   {
-    breath_1 = new double_breath_damage_t( p, 1u );
-    breath_2 = new double_breath_damage_t( p, 2u );
+    breath_1 = new double_breath_damage_t( p, 1U );
+    breath_2 = new double_breath_damage_t( p, 2U );
     add_child( breath_1 );
     add_child( breath_2 );
   }
@@ -1254,7 +1241,7 @@ struct double_breath_t : public warlock_pet_spell_t
 void_terror_t::void_terror_t( warlock_t* owner ) : warlock_simple_pet_t( owner, "void_terror", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "travel/double_breath";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1297,7 +1284,7 @@ struct overhead_assault_t : public warlock_pet_melee_attack_t
 wrathguard_t::wrathguard_t( warlock_t* owner ) : warlock_simple_pet_t( owner, "wrathguard", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "travel/overhead_assault";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1342,7 +1329,7 @@ vicious_hellhound_t::vicious_hellhound_t( warlock_t* owner )
   : warlock_simple_pet_t( owner, "vicious_hellhound", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "travel/demon_fangs";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1388,7 +1375,7 @@ illidari_satyr_t::illidari_satyr_t( warlock_t* owner )
   : warlock_simple_pet_t( owner, "illidari_satyr", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "travel/shadow_slash";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1429,7 +1416,7 @@ eyes_of_guldan_t::eyes_of_guldan_t( warlock_t* owner )
   : warlock_simple_pet_t( owner, "eye_of_guldan", PET_WARLOCK_RANDOM )
 {
   action_list_str        = "eye_of_guldan";
-  owner_coeff.ap_from_sp = 0.1;
+  owner_coeff.ap_from_sp = 0.12;
   owner_coeff.health     = 0.75;
 }
 
@@ -1462,7 +1449,7 @@ action_t* eyes_of_guldan_t::create_action( util::string_view name, const std::st
 prince_malchezaar_t::prince_malchezaar_t( warlock_t* owner )
   : warlock_simple_pet_t( owner, "prince_malchezaar", PET_WARLOCK_RANDOM )
 {
-  owner_coeff.ap_from_sp = 0.616;
+  owner_coeff.ap_from_sp = 1.15;
   owner_coeff.health     = 0.75;
   action_list_str        = "travel";
 }

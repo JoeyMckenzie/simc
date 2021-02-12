@@ -852,7 +852,7 @@ void paladin_t::create_buffs_protection()
         -> set_cooldown( 0_ms ); // handled by the ability
   buffs.guardian_of_ancient_kings = make_buff( this, "guardian_of_ancient_kings", find_specialization_spell( "Guardian of Ancient Kings" ) )
         -> set_cooldown( 0_ms )
-        -> set_stack_change_callback( [ this ] ( buff_t*, int old, int curr )
+        -> set_stack_change_callback( [ this ] ( buff_t*, int /*old*/, int curr )
         {
           if ( curr == 1 && conduit.royal_decree -> ok() )
             this -> buffs.royal_decree -> trigger();
@@ -990,11 +990,11 @@ void paladin_t::generate_action_prio_list_prot()
   cds -> add_talent( this, "Moment of Glory", "if=prev_gcd.1.avengers_shield&cooldown.avengers_shield.remains" );
   cds -> add_action( "heart_essence" );
 
-  std -> add_action( this, "Shield of the Righteous" , "if=debuff.judgment.up&(debuff.vengeful_shock.up|!conduit.vengeful_shock.enabled)" );
+  std -> add_action( this, "Shield of the Righteous" , "if=debuff.judgment.up" );
   std -> add_action( this, "Shield of the Righteous" , "if=holy_power=5|buff.holy_avenger.up|holy_power=4&talent.sanctified_wrath.enabled&buff.avenging_wrath.up" );
   std -> add_action( this, "Judgment", "target_if=min:debuff.judgment.remains,if=charges=2|!talent.crusaders_judgment.enabled" );
-  std -> add_action( this, "Avenger's Shield", "if=debuff.vengeful_shock.down&conduit.vengeful_shock.enabled" );
   std -> add_action( this, "Hammer of Wrath" );
+  std -> add_action( "blessing_of_the_seasons" );
   std -> add_action( this, "Avenger's Shield" );
   std -> add_action( this, "Judgment", "target_if=min:debuff.judgment.remains" );
   std -> add_action( "vanquishers_hammer" );

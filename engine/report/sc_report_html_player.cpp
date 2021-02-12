@@ -6,6 +6,7 @@
 #include "simulationcraft.hpp"
 
 #include "player/covenant.hpp"
+#include "dbc/temporary_enchant.hpp"
 #include "reports.hpp"
 #include "report/report_helper.hpp"
 #include "report/decorators.hpp"
@@ -279,7 +280,8 @@ double mean_damage( const T& result )
 template <typename T, typename V>
 double mean_value( const T& results, const std::initializer_list<V>& selectors )
 {
-  double sum = 0, count = 0;
+  double sum = 0;
+  double count = 0;
 
   range::for_each( selectors, [ & ]( const V& selector ) {
     auto idx = static_cast<int>( selector );
@@ -390,7 +392,7 @@ void print_html_action_summary( report::sc_html_stream& os, unsigned stats_mask,
   std::string critpct_str;
 
   // Create Merged Stat
-  if ( s.children.size() )
+  if ( !s.children.empty() )
   {
     auto compound_stats = std::make_unique<stats_t>( s.name_str + "_compound", s.player );
 
@@ -496,7 +498,10 @@ void collect_aps( const stats_t* stats, double& caps, double& capspct )
   capspct += stats->portion_amount;
 
   range::for_each( stats->children, [&]( const stats_t* s ) {
-    collect_aps( s, caps, capspct );
+    if (stats->type == s -> type)
+    {
+      collect_aps( s, caps, capspct );
+    }
   } );
 }
 
@@ -538,8 +543,8 @@ void print_html_action_info( report::sc_html_stream& os, unsigned stats_mask, co
   // Skip for abilities that do no damage
   if ( s.compound_amount > 0 || ( s.parent && s.parent->compound_amount > 0 ) )
   {
-    std::string compound_aps     = "";
-    std::string compound_aps_pct = "";
+    std::string compound_aps;
+    std::string compound_aps_pct;
     double cAPS                  = 0.0;
     double cAPSpct               = 0.0;
 
@@ -604,13 +609,13 @@ void print_html_action_info( report::sc_html_stream& os, unsigned stats_mask, co
   if ( p.sim->report_details )
   {
     // TODO: Transitional; Highcharts
-    std::string timeline_stat_aps_str = "";
+    std::string timeline_stat_aps_str;
     if ( !s.timeline_aps_chart.empty() )
     {
       timeline_stat_aps_str = "<img src=\"" + s.timeline_aps_chart + "\" alt=\"" +
         ( s.type == STATS_DMG ? "DPS" : "HPS" ) + " Timeline Chart\" />\n";
     }
-    std::string aps_distribution_str = "";
+    std::string aps_distribution_str;
     if ( !s.aps_distribution_chart.empty() )
     {
       aps_distribution_str = "<img src=\"" + s.aps_distribution_chart + "\" alt=\"" +
@@ -1117,7 +1122,7 @@ void print_html_action_info( report::sc_html_stream& os, unsigned stats_mask, co
       os << "</div>\n";  // Close details, damage/weapon, spell_data
     }
 
-    if ( expressions.size() )
+    if ( !expressions.empty() )
     {
       os << "<div>\n"
          << "<h4>Action Priority List</h4>\n";
@@ -1228,11 +1233,11 @@ void print_html_gear( report::sc_html_stream& os, const player_t& p )
       item_sim_desc += " }";
     }
 
-    if ( item.parsed.gem_stats.size() > 0 )
+    if ( !item.parsed.gem_stats.empty() )
     {
       item_sim_desc += ", gems: { ";
       item_sim_desc += item.gem_stats_str();
-      if ( item.socket_color_match() && item.parsed.socket_bonus_stats.size() > 0 )
+      if ( item.socket_color_match() && !item.parsed.socket_bonus_stats.empty() )
       {
         item_sim_desc += ", ";
         item_sim_desc += item.socket_bonus_stats_str();
@@ -1240,7 +1245,7 @@ void print_html_gear( report::sc_html_stream& os, const player_t& p )
       item_sim_desc += " }";
     }
 
-    if ( item.parsed.enchant_stats.size() > 0 )
+    if ( !item.parsed.enchant_stats.empty() )
     {
       item_sim_desc += ", enchant: { ";
       item_sim_desc += item.enchant_stats_str();
@@ -1249,6 +1254,15 @@ void print_html_gear( report::sc_html_stream& os, const player_t& p )
     else if ( !item.parsed.encoded_enchant.empty() )
     {
       item_sim_desc += ", enchant: " + item.parsed.encoded_enchant;
+    }
+
+    if ( item.parsed.temporary_enchant_id > 0 )
+    {
+      const auto& temp_enchant = temporary_enchant_entry_t::find_by_enchant_id(
+          item.parsed.temporary_enchant_id, item.player->dbc->ptr );
+      const auto spell = item.player->find_spell( temp_enchant.spell_id );
+      item_sim_desc += ", temporary_enchant: ";
+      item_sim_desc += report_decorators::decorated_spell_data_item( *item.sim, spell, item );
     }
 
     auto has_relics = range::find_if( item.parsed.gem_actual_ilevel, []( unsigned v ) { return v != 0; } );
@@ -1273,7 +1287,7 @@ void print_html_gear( report::sc_html_stream& os, const player_t& p )
       item_sim_desc += " }";
     }
 
-    if ( item.parsed.azerite_ids.size() )
+    if ( !item.parsed.azerite_ids.empty() )
     {
       std::stringstream s;
       for ( size_t i = 0; i < item.parsed.azerite_ids.size(); ++i )
@@ -3071,7 +3085,7 @@ void print_html_player_charts( report::sc_html_stream& os, const player_t& p,
 }
 
 void print_html_player_buff_spelldata( report::sc_html_stream& os, const buff_t& b, const spell_data_t& data,
-                                       std::string data_name )
+                                       const std::string& data_name )
 {
   // Spelldata
   if ( data.ok() )
@@ -3383,7 +3397,7 @@ void print_html_player_buffs( report::sc_html_stream& os, const player_t& p,
   os << "</table>\n";
 
   // constant buffs
-  if ( !p.is_pet() && ri.constant_buffs.size() )
+  if ( !p.is_pet() && !ri.constant_buffs.empty() )
   {
     os << "<table class=\"sc stripebody\">\n"
        << "<thead>\n"
@@ -3572,109 +3586,86 @@ void print_html_player_results_spec_gear( report::sc_html_stream& os, const play
 
   os << "<div class=\"toggle-content flexwrap\">\n";
 
-  if ( cd.dps.mean() > 0 || cd.hps.mean() > 0 || cd.aps.mean() > 0 )
+  if ( cd.dps.mean() > 0 )
   {
-    // Table for DPS, HPS, APS
+    // Table for DPS
     os << "<table class=\"sc\">\n"
        << "<tr>\n";
-    // First, make the header row
-    // Damage
-    if ( cd.dps.mean() > 0 )
-    {
-      os << "<th class=\"help\" data-help=\"#help-dps\">DPS</th>\n"
-         << "<th class=\"help\" data-help=\"#help-dpse\">DPS(e)</th>\n"
-         << "<th class=\"help\" data-help=\"#help-error\">DPS Error</th>\n"
-         << "<th class=\"help\" data-help=\"#help-range\">DPS Range</th>\n"
-         << "<th class=\"help\" data-help=\"#help-dpr\">DPR</th>\n";
-    }
-    // spacer
-    if ( cd.hps.mean() > 0 && cd.dps.mean() > 0 )
-      os << "<th>&#160;</th>\n";
-    // Heal
-    if ( cd.hps.mean() > 0 )
-    {
-      os << "<th class=\"help\" data-help=\"#help-hps\">HPS</th>\n"
-         << "<th class=\"help\" data-help=\"#help-hpse\">HPS(e)</th>\n"
-         << "<th class=\"help\" data-help=\"#help-error\">HPS Error</th>\n"
-         << "<th class=\"help\" data-help=\"#help-range\">HPS Range</th>\n"
-         << "<th class=\"help\" data-help=\"#help-hpr\">HPR</th>\n";
-    }
-    // spacer
-    if ( cd.hps.mean() > 0 && cd.aps.mean() > 0 )
-      os << "<th>&#160;</th>\n";
-    // Absorb
-    if ( cd.aps.mean() > 0 )
-    {
-      os << "<th class=\"help\" data-help=\"#help-aps\">APS</th>\n"
-         << "<th class=\"help\" data-help=\"#help-error\">APS Error</th>\n"
-         << "<th class=\"help\" data-help=\"#help-range\">APS Range</th>\n"
-         << "<th class=\"help\" data-help=\"#help-hpr\">APR</th>\n";
-    }
-    // end row, begin new row
+    os << "<th class=\"help\" data-help=\"#help-dps\">DPS</th>\n"
+       << "<th class=\"help\" data-help=\"#help-dpse\">DPS(e)</th>\n"
+       << "<th class=\"help\" data-help=\"#help-error\">DPS Error</th>\n"
+       << "<th class=\"help\" data-help=\"#help-range\">DPS Range</th>\n"
+       << "<th class=\"help\" data-help=\"#help-dpr\">DPR</th>\n";
     os << "</tr>\n"
        << "<tr>\n";
 
-    // Now do the data row
-    if ( cd.dps.mean() > 0 )
-    {
-      double range = ( p.collected_data.dps.percentile( 0.5 + sim.confidence / 2 ) -
-                       p.collected_data.dps.percentile( 0.5 - sim.confidence / 2 ) );
-      double dps_error = sim_t::distribution_mean_error( sim, p.collected_data.dps );
-      os.printf( "<td>%.1f</td>\n"
-                 "<td>%.1f</td>\n"
-                 "<td>%.1f / %.3f%%</td>\n"
-                 "<td>%.1f / %.1f%%</td>\n"
-                 "<td>%.1f</td>\n",
-                 cd.dps.mean(),
-                 cd.dpse.mean(),
-                 dps_error,
-                 cd.dps.mean() ? dps_error * 100 / cd.dps.mean() : 0,
-                 range,
-                 cd.dps.mean() ? range / cd.dps.mean() * 100.0 : 0,
-                 p.dpr );
-    }
-    // Spacer
-    if ( cd.dps.mean() > 0 && cd.hps.mean() > 0 )
-      os << "<td>&#160;&#160;&#160;&#160;&#160;</td>\n";
-    // Heal
-    if ( cd.hps.mean() > 0 )
-    {
-      double range = ( cd.hps.percentile( 0.5 + sim.confidence / 2 ) -
-                       cd.hps.percentile( 0.5 - sim.confidence / 2 ) );
-      double hps_error = sim_t::distribution_mean_error( sim, p.collected_data.hps );
-      os.printf( "<td>%.1f</td>\n"
-                 "<td>%.1f</td>\n"
-                 "<td>%.2f / %.2f%%</td>\n"
-                 "<td>%.0f / %.1f%%</td>\n"
-                 "<td>%.1f</td>\n",
-                 cd.hps.mean(),
-                 cd.hpse.mean(),
-                 hps_error,
-                 cd.hps.mean() ? hps_error * 100 / cd.hps.mean() : 0,
-                 range,
-                 cd.hps.mean() ? range / cd.hps.mean() * 100.0 : 0,
-                 p.hpr );
-    }
-    // Spacer
-    if ( cd.aps.mean() > 0 && cd.hps.mean() > 0 )
-      os << "<td>&#160;&#160;&#160;&#160;&#160;</td>\n";
-    // Absorb
-    if ( cd.aps.mean() > 0 )
-    {
-      double range = ( cd.aps.percentile( 0.5 + sim.confidence / 2 ) -
-                       cd.aps.percentile( 0.5 - sim.confidence / 2 ) );
-      double aps_error = sim_t::distribution_mean_error( sim, p.collected_data.aps );
-      os.printf( "<td>%.1f</td>\n"
-                 "<td>%.2f / %.2f%%</td>\n"
-                 "<td>%.0f / %.1f%%</td>\n"
-                 "<td>%.1f</td>\n",
-                 cd.aps.mean(),
-                 aps_error,
-                 cd.aps.mean() ? aps_error * 100 / cd.aps.mean() : 0,
-                 range,
-                 cd.aps.mean() ? range / cd.aps.mean() * 100.0 : 0,
-                 p.hpr );
-    }
+    double dps_range =
+        ( cd.dps.percentile( 0.5 + sim.confidence / 2 ) - cd.dps.percentile( 0.5 - sim.confidence / 2 ) );
+    double dps_error = sim_t::distribution_mean_error( sim, cd.dps );
+    os.printf(
+        "<td>%.1f</td>\n"
+        "<td>%.1f</td>\n"
+        "<td>%.1f / %.3f%%</td>\n"
+        "<td>%.1f / %.1f%%</td>\n"
+        "<td>%.1f</td>\n",
+        cd.dps.mean(), cd.dpse.mean(), dps_error, cd.dps.mean() ? dps_error * 100 / cd.dps.mean() : 0, dps_range,
+        cd.dps.mean() ? dps_range / cd.dps.mean() * 100.0 : 0, p.dpr );
+    // close table
+    os << "</tr>\n"
+       << "</table>\n";
+  }
+
+  // Heal
+  if ( cd.hps.mean() > 0 )
+  {
+    // Table for HPS
+    os << "<table class=\"sc\">\n"
+       << "<tr>\n";
+    os << "<th class=\"help\" data-help=\"#help-hps\">HPS</th>\n"
+       << "<th class=\"help\" data-help=\"#help-hpse\">HPS(e)</th>\n"
+       << "<th class=\"help\" data-help=\"#help-error\">HPS Error</th>\n"
+       << "<th class=\"help\" data-help=\"#help-range\">HPS Range</th>\n"
+       << "<th class=\"help\" data-help=\"#help-hpr\">HPR</th>\n";
+    os << "</tr>\n"
+       << "<tr>\n";
+    double hps_range =
+        ( cd.hps.percentile( 0.5 + sim.confidence / 2 ) - cd.hps.percentile( 0.5 - sim.confidence / 2 ) );
+    double hps_error = sim_t::distribution_mean_error( sim, cd.hps );
+    os.printf(
+        "<td>%.1f</td>\n"
+        "<td>%.1f</td>\n"
+        "<td>%.1f / %.3f%%</td>\n"
+        "<td>%.1f / %.1f%%</td>\n"
+        "<td>%.1f</td>\n",
+        cd.hps.mean(), cd.hpse.mean(), hps_error, cd.hps.mean() ? hps_error * 100 / cd.hps.mean() : 0, hps_range,
+        cd.hps.mean() ? hps_range / cd.hps.mean() * 100.0 : 0, p.hpr );
+    // close table
+    os << "</tr>\n"
+       << "</table>\n";
+  }
+
+  // Absorb
+  if ( cd.aps.mean() > 0 )
+  {
+    // Table for APS
+    os << "<table class=\"sc\">\n"
+       << "<tr>\n";
+    os << "<th class=\"help\" data-help=\"#help-aps\">APS</th>\n"
+       << "<th class=\"help\" data-help=\"#help-error\">APS Error</th>\n"
+       << "<th class=\"help\" data-help=\"#help-range\">APS Range</th>\n"
+       << "<th class=\"help\" data-help=\"#help-hpr\">APR</th>\n";
+    os << "</tr>\n"
+       << "<tr>\n";
+    double aps_range =
+        ( cd.aps.percentile( 0.5 + sim.confidence / 2 ) - cd.aps.percentile( 0.5 - sim.confidence / 2 ) );
+    double aps_error = sim_t::distribution_mean_error( sim, cd.aps );
+    os.printf(
+        "<td>%.1f</td>\n"
+        "<td>%.1f / %.3f%%</td>\n"
+        "<td>%.1f / %.1f%%</td>\n"
+        "<td>%.1f</td>\n",
+        cd.aps.mean(), aps_error, cd.aps.mean() ? aps_error * 100 / cd.aps.mean() : 0, aps_range,
+        cd.aps.mean() ? aps_range / cd.aps.mean() * 100.0 : 0, p.hpr );
     // close table
     os << "</tr>\n"
        << "</table>\n";

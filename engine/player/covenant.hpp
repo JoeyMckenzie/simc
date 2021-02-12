@@ -158,6 +158,9 @@ public:
   /// HTML report covenant-related information generator
   report::sc_html_stream& generate_report( report::sc_html_stream& root ) const;
 
+  /// Conduit checking helper function for default profile generation
+  void check_conduits( util::string_view tier_name, unsigned max_conduit_rank ) const;
+
   /// Option string for the soulbinds on this actor
   std::string soulbind_option_str() const;
 
@@ -196,7 +199,7 @@ struct covenant_cb_base_t
 
 struct covenant_ability_cast_cb_t : public dbc_proc_callback_t
 {
-  unsigned class_ability;
+  std::vector<unsigned> class_abilities;
   unsigned base_ability;
   auto_dispose< std::vector<covenant_cb_base_t*> > cb_list;
 

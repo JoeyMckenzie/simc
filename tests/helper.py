@@ -1,4 +1,4 @@
-import sys, os, shutil, subprocess, re, signal, shlex
+import sys, os, shutil, subprocess, re, signal
 from pathlib import Path
 
 def __error_status(code):
@@ -66,9 +66,9 @@ class Test(object):
         args.append(self._profile)
         for arg in self._args:
             if isinstance(arg, tuple):
-                args.append(shlex.quote('{}={}'.format(*arg)))
+                args.append('{}={}'.format(*arg))
             else:
-                args.append(shlex.quote(str(arg)))
+                args.append(str(arg))
         return args
 
 SIMC_WALL_SECONDS_RE = re.compile('WallSeconds\\s*=\\s*([0-9\\.]+)')
@@ -79,9 +79,9 @@ def run_test(test):
     try:
         res = subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='UTF-8', timeout=30)
         wall_time = SIMC_WALL_SECONDS_RE.search(res.stdout)
-        return ( True, float(wall_time.group(1)), None )
+        return ( True, float(wall_time.group(1)), None, res.stderr )
     except subprocess.CalledProcessError as err:
-        return ( False, 0, err )
+        return ( False, 0, err, err.stderr)
 
 def run(tests):
     success = 0
@@ -92,16 +92,18 @@ def run(tests):
         nonlocal total, failure, success
         total += 1
         print('  {:<60}    '.format(subtest.name), end='', flush=True)
-        res, time, err = run_test(subtest)
+        res, time, err, stderr = run_test(subtest)
         if res:
             print('[PASS] {:.5f}'.format(time))
+            if stderr:
+                print(stderr.rstrip('\r\n'))
             success += 1
         else:
             print('[FAIL]')
             print('-- {:<62} --------------'.format(__error_status(err.returncode)))
             print(err.cmd)
-            if err.stderr:
-                print(err.stderr.rstrip('\r\n'))
+            if stderr:
+                print(stderr.rstrip('\r\n'))
             print('-' * 80)
             failure += 1
 

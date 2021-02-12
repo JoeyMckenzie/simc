@@ -211,22 +211,23 @@ public:
   /// This ability leaves a ticking dot on the ground, and doesn't move when the target moves. Used with original_x and original_y
   bool ground_aoe;
 
-  /// Duration of the ground area trigger
-  timespan_t ground_aoe_duration;
-
   /// Round spell base damage to integer before using
   bool round_base_dmg;
 
   /// Used with tick_action, tells tick_action to update state on every tick.
   bool dynamic_tick_action;
 
-  /// Type of attack power used by the ability
-  attack_power_type ap_type;
 
   /// Did a channel action have an interrupt_immediate used to cancel it on it
   bool interrupt_immediate_occurred;
 
   bool hit_any_target;
+
+  /// Duration of the ground area trigger
+  timespan_t ground_aoe_duration;
+
+  /// Type of attack power used by the ability
+  attack_power_type ap_type;
 
   /**
    * @brief Behavior of dot.
@@ -332,6 +333,9 @@ public:
 
   /// Static action cooldown duration multiplier
   double base_recharge_multiplier;
+
+  /// A second static action cooldown duration multiplier that also reduces the effectiveness of flat cooldown adjustments
+  double base_recharge_rate_multiplier;
 
   /// Maximum distance that the ability can travel. Used on abilities that instantly move you, or nearly instantly move you to a location.
   double base_teleport_distance;
@@ -580,7 +584,7 @@ public:
   bool has_travel_events_for( const player_t* target ) const;
 
   /** Determine if the action can have a resulting damage/heal amount > 0 */
-  bool has_amount_result() const
+  virtual bool has_amount_result() const
   {
     return attack_power_mod.direct > 0 || attack_power_mod.tick > 0
         || spell_power_mod.direct > 0 || spell_power_mod.tick > 0
@@ -588,6 +592,8 @@ public:
   }
 
   void parse_spell_data( const spell_data_t& );
+
+  void parse_effect_data( const spelleffect_data_t& );
 
   void parse_target_str();
 
@@ -665,6 +671,9 @@ public:
 
   virtual double recharge_multiplier( const cooldown_t& ) const
   { return base_recharge_multiplier; }
+
+  virtual double recharge_rate_multiplier( const cooldown_t& ) const
+  { return base_recharge_rate_multiplier; }
 
   /** Cooldown base duration for action based cooldowns. */
   virtual timespan_t cooldown_base_duration( const cooldown_t& cd ) const;
@@ -879,8 +888,6 @@ public:
   // mutating virtual functions
   // ==========================
 
-  virtual void parse_effect_data( const spelleffect_data_t& );
-
   virtual void parse_options( util::string_view options_str );
 
   virtual void consume_resource();
@@ -891,11 +898,11 @@ public:
 
   virtual void last_tick(dot_t* d);
 
-  virtual void assess_damage(result_amount_type, action_state_t* assess_state);
+  virtual void assess_damage( result_amount_type, action_state_t* state );
 
   virtual void record_data(action_state_t* data);
 
-  virtual void schedule_execute(action_state_t* execute_state = nullptr);
+  virtual void schedule_execute( action_state_t* state = nullptr );
 
   virtual void queue_execute( execute_type type );
 
@@ -954,7 +961,7 @@ public:
   virtual void update_state( action_state_t* s, result_amount_type rt )
   { snapshot_internal( s, update_flags, rt ); }
 
-  event_t* start_action_execute_event( timespan_t time, action_state_t* execute_state = nullptr );
+  event_t* start_action_execute_event( timespan_t time, action_state_t* state = nullptr );
 
   virtual bool consume_cost_per_tick( const dot_t& dot );
 

@@ -2,18 +2,19 @@ hunter="PR_Hunter_Survival"
 source=default
 spec=survival
 level=60
-race=troll
+race=mechagnome
 role=attack
 position=back
 talents=3101012
 covenant=night_fae
-soulbind=grove_invigoration/spirit_attunement:4
+soulbind=niya,grove_invigoration/spirit_attunement:4
 
 # Default consumables
 potion=spectral_agility
 flask=spectral_flask_of_power
 food=feast_of_gluttonous_hedonism
 augmentation=veiled
+temporary_enchant=main_hand:shadowcore_oil
 
 # This default action priority list is automatically created based on your character.
 # It is a attempt to provide you with a action list that is both simple and practicable,
@@ -73,6 +74,8 @@ actions.apst+=/kill_shot
 actions.apst+=/flanking_strike,if=focus+cast_regen<focus.max
 actions.apst+=/a_murder_of_crows
 actions.apst+=/wildfire_bomb,if=full_recharge_time<gcd|focus+cast_regen<focus.max&(next_wi_bomb.volatile&dot.serpent_sting.ticking&dot.serpent_sting.refreshable|next_wi_bomb.pheromone&!buff.mongoose_fury.up&focus+cast_regen<focus.max-action.kill_command.cast_regen*3)|time_to_die<10
+actions.apst+=/carve,if=active_enemies>1&!runeforge.rylakstalkers_confounding_strikes.equipped
+actions.apst+=/butchery,if=active_enemies>1&!runeforge.rylakstalkers_confounding_strikes.equipped&cooldown.wildfire_bomb.full_recharge_time>spell_targets&(charges_fractional>2.5|dot.shrapnel_bomb.ticking)
 actions.apst+=/steel_trap,if=focus+cast_regen<focus.max
 actions.apst+=/mongoose_bite,target_if=max:debuff.latent_poison_injection.stack,if=buff.mongoose_fury.up&buff.mongoose_fury.remains<focus%(action.mongoose_bite.cost-cast_regen)*gcd&!buff.wild_spirits.remains|buff.mongoose_fury.remains&next_wi_bomb.pheromone
 actions.apst+=/kill_command,target_if=min:bloodseeker.remains,if=full_recharge_time<gcd&focus+cast_regen<focus.max
@@ -117,6 +120,7 @@ actions.cds+=/fireblood,if=cooldown.coordinated_assault.remains>30
 actions.cds+=/lights_judgment
 actions.cds+=/bag_of_tricks,if=cooldown.kill_command.full_recharge_time>gcd
 actions.cds+=/berserking,if=cooldown.coordinated_assault.remains>60|time_to_die<13
+actions.cds+=/muzzle
 actions.cds+=/potion,if=target.time_to_die<60|buff.coordinated_assault.up
 actions.cds+=/steel_trap,if=runeforge.nessingwarys_trapping_apparatus.equipped&focus+cast_regen<focus.max
 actions.cds+=/freezing_trap,if=runeforge.nessingwarys_trapping_apparatus.equipped&focus+cast_regen<focus.max
@@ -166,6 +170,8 @@ actions.st+=/wildfire_bomb,if=full_recharge_time<gcd&focus+cast_regen<focus.max|
 actions.st+=/steel_trap,if=focus+cast_regen<focus.max
 actions.st+=/flanking_strike,if=focus+cast_regen<focus.max
 actions.st+=/kill_command,target_if=min:bloodseeker.remains,if=focus+cast_regen<focus.max&(runeforge.nessingwarys_trapping_apparatus.equipped&cooldown.freezing_trap.remains&cooldown.tar_trap.remains|!runeforge.nessingwarys_trapping_apparatus.equipped)
+actions.st+=/carve,if=active_enemies>1&!runeforge.rylakstalkers_confounding_strikes.equipped
+actions.st+=/butchery,if=active_enemies>1&!runeforge.rylakstalkers_confounding_strikes.equipped&cooldown.wildfire_bomb.full_recharge_time>spell_targets&(charges_fractional>2.5|dot.shrapnel_bomb.ticking)
 actions.st+=/a_murder_of_crows
 actions.st+=/mongoose_bite,target_if=max:debuff.latent_poison_injection.stack,if=dot.shrapnel_bomb.ticking|buff.mongoose_fury.stack=5
 actions.st+=/serpent_sting,target_if=min:remains,if=refreshable|buff.vipers_venom.up
@@ -175,21 +181,21 @@ actions.st+=/mongoose_bite,target_if=max:debuff.latent_poison_injection.stack,if
 actions.st+=/raptor_strike,target_if=max:debuff.latent_poison_injection.stack
 actions.st+=/wildfire_bomb,if=next_wi_bomb.volatile&dot.serpent_sting.ticking|next_wi_bomb.pheromone|next_wi_bomb.shrapnel
 
-head=nathrian_usurpers_mask,id=178816,ilevel=184,enchant=shadowcore_oil
-neck=sin_stained_pendant,id=178827,ilevel=184
+head=nathrian_usurpers_mask,id=178816,bonus_id=6807/1498/6646
+neck=sin_stained_pendant,id=178827,bonus_id=6807/1498/6646
 shoulders=boneshatter_pauldrons,id=172327,bonus_id=6716/7005/6649/6650/1487
-back=drape_of_twisted_loyalties,id=180123,ilevel=184
-chest=harness_of_twisted_whims,id=179353,ilevel=184,enchant=eternal_skirmish
-wrists=fallen_paragons_armguards,id=180114,ilevel=184
-hands=hakkari_revenants_grips,id=179325,ilevel=184
-waist=executors_prideful_girdle,id=178843,ilevel=184
-legs=lichbone_legguards,id=178778,ilevel=184
-feet=spatial_rift_striders,id=179345,ilevel=184,enchant=eternal_agility
-finger1=death_gods_signet,id=179355,ilevel=184,enchant=tenet_of_haste
-finger2=bloodoath_signet,id=178871,ilevel=184,enchant=tenet_of_haste
-trinket1=inscrutable_quantum_device,id=179350,ilevel=184
-trinket2=bottled_flayedwing_toxin,id=178742,ilevel=184
-main_hand=halberd_of_the_aranakk,id=178929,ilevel=184,enchant=sinful_revelation
+back=drape_of_twisted_loyalties,id=180123,bonus_id=6807/1498/6646
+chest=harness_of_twisted_whims,id=179353,bonus_id=6807/1498/6646,enchant=eternal_skirmish
+wrists=fallen_paragons_armguards,id=180114,bonus_id=6807/1498/6646
+hands=hakkari_revenants_grips,id=179325,bonus_id=6807/1498/6646
+waist=executors_prideful_girdle,id=178843,bonus_id=6807/1498/6646
+legs=lichbone_legguards,id=178778,bonus_id=6807/1498/6646
+feet=spatial_rift_striders,id=179345,bonus_id=6807/1498/6646,enchant=eternal_agility
+finger1=death_gods_signet,id=179355,bonus_id=6807/1498/6646,enchant=tenet_of_haste
+finger2=bloodoath_signet,id=178871,bonus_id=6807/1498/6646,enchant=tenet_of_haste
+trinket1=inscrutable_quantum_device,id=179350,bonus_id=6807/1498/6646
+trinket2=bottled_flayedwing_toxin,id=178742,bonus_id=6807/1498/6646
+main_hand=halberd_of_the_aranakk,id=178929,bonus_id=6807/1498/6646,enchant=sinful_revelation
 
 # Gear Summary
 # gear_ilvl=184.40

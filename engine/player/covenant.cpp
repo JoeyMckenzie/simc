@@ -21,8 +21,8 @@ conduit_data_t::conduit_data_t() :
   /* m_player( nullptr ), */ m_conduit( &conduit_rank_entry_t::nil() ), m_spell( spell_data_t::not_found() )
 { }
 
-conduit_data_t::conduit_data_t( const player_t* player, const conduit_rank_entry_t& entry ) :
-  /* m_player( player ), */ m_conduit( &entry ), m_spell( dbc::find_spell( player, entry.spell_id ) )
+conduit_data_t::conduit_data_t( const player_t* player, const conduit_rank_entry_t& conduit )
+  : /* m_player( player ), */ m_conduit( &conduit ), m_spell( dbc::find_spell( player, conduit.spell_id ) )
 { }
 
 bool conduit_data_t::ok() const
@@ -213,7 +213,7 @@ bool covenant_state_t::parse_soulbind( sim_t*             sim,
       }
 
       const auto& conduit_rank_entry = conduit_rank_entry_t::find( conduit_entry->id,
-          conduit_rank - 1u, m_player->dbc->ptr );
+          conduit_rank - 1U, m_player->dbc->ptr );
       if ( conduit_rank_entry.conduit_id == 0 )
       {
         sim->error( "{} unknown conduit rank {} for {} (id={})",
@@ -222,7 +222,7 @@ bool covenant_state_t::parse_soulbind( sim_t*             sim,
       }
 
       // In game ranks are zero-indexed
-      m_conduits.emplace_back( conduit_entry->id, conduit_rank - 1u );
+      m_conduits.emplace_back( conduit_entry->id, conduit_rank - 1U );
     }
     // Soulbind handling
     else
@@ -363,8 +363,8 @@ std::string covenant_state_t::soulbind_option_str() const
     for ( auto it = m_soulbind_str.begin(); it != m_soulbind_str.end(); it++ )
     {
       auto str = *it;
-      str.erase( 0, str.find_first_not_of( "/" ) );
-      str.erase( str.find_last_not_of( "/" ) + 1 );
+      str.erase( 0, str.find_first_not_of( '/' ) );
+      str.erase( str.find_last_not_of( '/' ) + 1 );
 
       if ( !str.empty() )
         output += fmt::format( "{}={}", it == m_soulbind_str.begin() ? "soulbind" : "\nsoulbind+", str );
@@ -497,7 +497,7 @@ void covenant_state_t::register_options( player_t* player )
 unsigned covenant_state_t::get_covenant_ability_spell_id( bool generic ) const
 {
   if ( !enabled() )
-    return 0u;
+    return 0U;
 
   for ( const auto& e : covenant_ability_entry_t::data( m_player->dbc->ptr ) )
   {
@@ -516,7 +516,7 @@ unsigned covenant_state_t::get_covenant_ability_spell_id( bool generic ) const
     return e.spell_id;
   }
 
-  return 0u;
+  return 0U;
 }
 
 report::sc_html_stream& covenant_state_t::generate_report( report::sc_html_stream& root ) const
@@ -545,7 +545,7 @@ report::sc_html_stream& covenant_state_t::generate_report( report::sc_html_strea
 
   root << "</ul></td></tr>\n";
 
-  if ( m_soulbinds.size() )
+  if ( !m_soulbinds.empty() )
   {
     root << "<tr class=\"left\"><th></th><td><ul class=\"float\">\n";
 
@@ -561,19 +561,55 @@ report::sc_html_stream& covenant_state_t::generate_report( report::sc_html_strea
   return root;
 }
 
+// Conduit checking function for default profile generation in report_helper::check_gear()
+void covenant_state_t::check_conduits( util::string_view tier_name, unsigned max_conduit_rank ) const
+{
+  // Copied logic from covenant_state_t::generate_report(), feel free to improve it
+  for ( const auto& e : conduit_entry_t::data( m_player->dbc->ptr ) )
+  {
+    for ( const auto& cd : m_conduits )
+    {
+      if ( std::get<0>( cd ) == e.id )
+      {
+        unsigned int conduit_rank = std::get<1>( cd ) + 1;
+        if ( conduit_rank != max_conduit_rank )
+        {
+          m_player -> sim -> error( "Player {} has conduit {} equipped at rank {}, conduit rank for {} is {}.\n",
+                                    m_player -> name(), e.name, conduit_rank, tier_name, max_conduit_rank );
+        }
+      }
+    }
+  }
+  // TODO?: check conduit count too? Not sure if it's possible
+  // It doesn't seem like we extract conduit type or soulbind trees from spelldata
+}
+
 covenant_cb_base_t::covenant_cb_base_t( bool on_class, bool on_base )
   : trigger_on_class( on_class ), trigger_on_base( on_base )
 {}
 
 covenant_ability_cast_cb_t::covenant_ability_cast_cb_t( player_t* p, const special_effect_t& e )
   : dbc_proc_callback_t( p, e ),
-    class_ability( p->covenant->get_covenant_ability_spell_id() ),
+    class_abilities(),
     base_ability( p->covenant->get_covenant_ability_spell_id( true ) ),
     cb_list()
 {
+  class_abilities.push_back( p->covenant->get_covenant_ability_spell_id() );
+
   // Manual overrides for covenant abilities that don't utilize the spells found in __covenant_ability_data dbc table
   if ( p->type == DRUID && p->covenant->type() == covenant_e::KYRIAN )
-    class_ability = 326446;
+    class_abilities.push_back( 326446 );
+  // Night Fae paladins have 4 different abilities in a cycle, but only Blessing of Summer is in __covenant_ability_data
+  if ( p -> type == PALADIN && p -> covenant -> type() == covenant_e::NIGHT_FAE )
+  {
+    class_abilities.push_back( 328622 ); // Blessing of Autumn
+    class_abilities.push_back( 328281 ); // Blessing of Winter
+    class_abilities.push_back( 328282 ); // Blessing of Spring
+  }
+  if ( p -> type == DEATH_KNIGHT && p -> covenant -> type() == covenant_e::NIGHT_FAE )
+  {
+    class_abilities.push_back( 152280 );  // Defile
+  }
 }
 
 void covenant_ability_cast_cb_t::initialize()
@@ -584,15 +620,21 @@ void covenant_ability_cast_cb_t::initialize()
 
 void covenant_ability_cast_cb_t::trigger( action_t* a, action_state_t* s )
 {
-  if ( a->data().id() != class_ability && a->data().id() != base_ability )
-    return;
-
-  for ( const auto& cb : cb_list )
+  for ( auto class_ability : class_abilities )
   {
-    if ( ( cb->trigger_on_class && a->data().id() == class_ability ) ||
-         ( cb->trigger_on_base && a->data().id() == base_ability ) )
-      cb->trigger( a, s );
+    if ( a -> data().id() == class_ability )
+    {
+      for ( const auto& cb : cb_list )
+        if ( cb -> trigger_on_class )
+          cb -> trigger( a, s );
+      return;
+    }
   }
+
+  if ( a -> data().id() == base_ability )
+    for ( const auto& cb : cb_list )
+      if ( cb -> trigger_on_base )
+        cb -> trigger( a, s );
 }
 
 covenant_ability_cast_cb_t* get_covenant_callback( player_t* p )
@@ -655,17 +697,17 @@ bool parse_blizzard_covenant_information( player_t*               player,
 
   // The rest of the code cannot be run because Blizzard API does not indicate the active
   // path.
-  return true;
+  //return true;
 
   if ( !covenant_data.HasMember( "soulbinds" ) || !covenant_data[ "soulbinds" ].IsArray() )
   {
     return true;
   }
 
-  for ( auto i = 0u; i < covenant_data[ "soulbinds" ].Size(); ++i )
+  for ( auto i = 0U; i < covenant_data[ "soulbinds" ].Size(); ++i )
   {
     const auto& soulbind = covenant_data[ "soulbinds" ][ i ];
-    if ( !soulbind[ "is_active" ].GetBool() )
+    if ( !soulbind.HasMember( "is_active" ) || !soulbind[ "is_active" ].GetBool() )
     {
       continue;
     }
@@ -676,7 +718,7 @@ bool parse_blizzard_covenant_information( player_t*               player,
 
     player->covenant->set_soulbind_id( fmt::format( "{}:{}", soulbind_name, soulbind_id ) );
 
-    for ( auto trait_idx = 0u; trait_idx < soulbind[ "traits" ].Size(); ++trait_idx )
+    for ( auto trait_idx = 0U; trait_idx < soulbind[ "traits" ].Size(); ++trait_idx )
     {
       const auto& entry = soulbind[ "traits" ][ trait_idx ];
       // Soulbind spell
@@ -717,7 +759,7 @@ namespace report_decorators
 {
 std::string decorated_conduit_name( const sim_t& sim, const conduit_data_t& conduit )
 {
-  auto rank_str = fmt::format( "rank={}", conduit.rank() );
+  auto rank_str = fmt::format( "rank={}", conduit.rank() - 1 );
   return decorated_spell_name( sim, *( conduit.operator->() ), rank_str );
 }
 } // namespace report_decorators

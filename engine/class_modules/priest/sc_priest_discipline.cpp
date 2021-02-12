@@ -1,6 +1,7 @@
 // ==========================================================================
-// Dedmonwakeen's Raid DPS/TPS Simulator.
-// Send questions to natehieter@gmail.com
+// Discipline Priest Sim File
+// Contact: https://github.com/orgs/simulationcraft/teams/priest/members
+// Wiki: https://github.com/simulationcraft/simc/wiki/Priests
 // ==========================================================================
 
 #include "player/covenant.hpp"
@@ -169,6 +170,8 @@ struct power_word_solace_t final : public priest_spell_t
   {
     parse_options( options_str );
 
+    cooldown->hasted = true;
+
     travel_speed = 0.0;  // DBC has default travel taking 54seconds.....
   }
 
@@ -254,6 +257,26 @@ struct shadow_covenant_t final : public priest_spell_t
     priest().buffs.shadow_covenant->trigger();
   }
 };
+
+// Implemented as a dummy effect, without providing absorbs
+struct spirit_shell_t final : public priest_spell_t
+{
+  spirit_shell_t( priest_t& player, util::string_view options_str )
+    : priest_spell_t( "spirit_shell", player, player.talents.spirit_shell )
+  {
+    parse_options( options_str );
+
+    harmful = false;
+  }
+
+  void execute() override
+  {
+    priest_spell_t::execute();
+
+    priest().buffs.spirit_shell->trigger();
+  }
+};
+
 }  // namespace spells
 
 }  // namespace actions
@@ -274,6 +297,8 @@ void priest_t::create_buffs_discipline()
 
   buffs.shadow_covenant = make_buff( this, "shadow_covenant", talents.shadow_covenant->effectN( 4 ).trigger() )
                               ->set_trigger_spell( talents.shadow_covenant );
+
+  buffs.spirit_shell = make_buff( this, "spirit_shell", talents.spirit_shell );
 }
 
 void priest_t::init_rng_discipline()
@@ -289,31 +314,24 @@ void priest_t::init_spells_discipline()
   talents.schism        = find_talent_spell( "Schism" );
   // T25
   talents.body_and_soul   = find_talent_spell( "Body and Soul" );
-  talents.masochism       = find_talent_spell( "Masochism" );
   talents.angelic_feather = find_talent_spell( "Angelic Feather" );
   // T30
-  talents.shield_discipline = find_talent_spell( "Shield Discipline" );
   talents.mindbender        = find_talent_spell( "Mindbender" );
   talents.power_word_solace = find_talent_spell( "Power Word: Solace" );
   // T35
   talents.psychic_voice = find_talent_spell( "Psychic Voice" );
-  talents.dominant_mind = find_talent_spell( "Dominant Mind" );
   talents.shining_force = find_talent_spell( "Shining Force" );
   // T40
   talents.sins_of_the_many = find_talent_spell( "Sins of the Many" );
-  talents.contrition       = find_talent_spell( "Contrition" );
   talents.shadow_covenant  = find_talent_spell( "Shadow Covenant" );
   // T45
   talents.purge_the_wicked = find_talent_spell( "Purge the Wicked" );
   talents.divine_star      = find_talent_spell( "Divine Star" );
   talents.halo             = find_talent_spell( "Halo" );
   // T50
-  talents.lights_caress    = find_talent_spell( "Light's Caress" );
-  talents.luminous_barrier = find_talent_spell( "Luminous Barrier" );
-  talents.evangelism       = find_talent_spell( "Evangelism" );
+  talents.spirit_shell = find_talent_spell( "Spirit Shell" );
 
   // Passive spell data
-  specs.discipline_priest      = find_specialization_spell( "Discipline Priest" );
   specs.power_of_the_dark_side = find_specialization_spell( "Power of the Dark Side" );
 }
 
@@ -346,6 +364,10 @@ action_t* priest_t::create_action_discipline( util::string_view name, util::stri
   {
     return new shadow_covenant_t( *this, options_str );
   }
+  if ( name == "spirit_shell" )
+  {
+    return new spirit_shell_t( *this, options_str );
+  }
 
   return nullptr;
 }
@@ -353,98 +375,6 @@ action_t* priest_t::create_action_discipline( util::string_view name, util::stri
 std::unique_ptr<expr_t> priest_t::create_expression_discipline( action_t*, util::string_view /*name_str*/ )
 {
   return {};
-}
-
-void priest_t::generate_apl_discipline_h()
-{
-  action_priority_list_t* def = get_action_priority_list( "default" );
-
-  // DEFAULT
-  if ( sim->allow_potions )
-  {
-    def->add_action( "mana_potion,if=mana.pct<=75" );
-  }
-
-  if ( find_class_spell( "Shadowfiend" )->ok() )
-  {
-    def->add_action( this, "Shadowfiend" );
-  }
-
-  if ( race == RACE_TROLL )
-  {
-    def->add_action( "berserking" );
-  }
-  if ( race == RACE_BLOOD_ELF )
-  {
-    def->add_action( "arcane_torrent,if=mana.pct<=90" );
-  }
-  def->add_action( this, "Penance" );
-  def->add_action( this, "Shadow Mend" );
-}
-
-/** Discipline Damage Combat Action Priority List */
-void priest_t::generate_apl_discipline_d()
-{
-  action_priority_list_t* def  = get_action_priority_list( "default" );
-  action_priority_list_t* boon = get_action_priority_list( "boon" );
-
-  boon->add_action( "ascended_blast" );
-  boon->add_action( "ascended_nova" );
-
-  // On-Use Items
-  for ( const auto& item_action : get_item_actions() )
-  {
-    def->add_action( item_action );
-  }
-
-  // Professions
-  for ( const auto& profession_action : get_profession_actions() )
-  {
-    def->add_action( profession_action );
-  }
-
-  // Potions
-  if ( sim->allow_potions && true_level >= 80 )
-  {
-    def->add_action( "potion,if=buff.bloodlust.react|target.time_to_die<=40" );
-  }
-
-  if ( race == RACE_BLOOD_ELF )
-  {
-    def->add_action( "arcane_torrent,if=mana.pct<=95" );
-  }
-
-  if ( find_class_spell( "Shadowfiend" )->ok() )
-  {
-    def->add_action( "mindbender,if=talent.mindbender.enabled" );
-    def->add_action( "shadowfiend,if=!talent.mindbender.enabled" );
-  }
-
-  if ( race != RACE_BLOOD_ELF )
-  {
-    for ( const auto& racial_action : get_racial_actions() )
-    {
-      def->add_action( racial_action );
-    }
-  }
-
-  def->add_action( this, "Power Infusion" );
-  def->add_talent( this, "Shadow Covenant" );
-  def->add_action( this, covenant.boon_of_the_ascended, "Boon of the Ascended" );
-  def->add_call_action_list( this, covenant.boon_of_the_ascended, boon, "if=buff.boon_of_the_ascended.up" );
-  def->add_talent( this, "Purge the Wicked", "if=!ticking" );
-  def->add_action( this, "Shadow Word: Pain", "if=!ticking&!talent.purge_the_wicked.enabled" );
-  def->add_action( this, "Shadow Word: Death" );
-
-  def->add_talent( this, "Schism" );
-  def->add_action( this, "Mind Blast" );
-  def->add_action( this, "Penance" );
-  def->add_talent( this, "Purge the Wicked", "if=remains<(duration*0.3)" );
-  def->add_action( this, "Shadow Word: Pain", "if=remains<(duration*0.3)&!talent.purge_the_wicked.enabled" );
-  def->add_talent( this, "Power Word: Solace" );
-  def->add_talent( this, "Divine Star", "if=mana.pct>80" );
-  def->add_action( this, "Smite" );
-  def->add_action( this, "Shadow Word: Pain" );
 }
 
 }  // namespace priestspace

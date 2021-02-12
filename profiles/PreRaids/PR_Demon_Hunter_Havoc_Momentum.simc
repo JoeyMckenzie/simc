@@ -6,15 +6,16 @@ race=night_elf
 timeofday=night
 role=attack
 position=back
-talents=3330202
+talents=3330222
 covenant=venthyr
-soulbind=thrill_seeker/growing_inferno:4
+soulbind=nadjia_the_mistblade,thrill_seeker/growing_inferno:4
 
 # Default consumables
 potion=phantom_fire
 flask=spectral_flask_of_power
 food=feast_of_gluttonous_hedonism
 augmentation=veiled
+temporary_enchant=main_hand:shaded_sharpening_stone/off_hand:shaded_sharpening_stone
 
 # This default action priority list is automatically created based on your character.
 # It is a attempt to provide you with a action list that is both simple and practicable,
@@ -33,7 +34,10 @@ actions.precombat+=/use_item,name=azsharas_font_of_power
 
 # Executed every time the actor is available.
 actions=auto_attack
-actions+=/variable,name=blade_dance,value=talent.first_blood.enabled|spell_targets.blade_dance1>=(3-(talent.trail_of_ruin.enabled+buff.metamorphosis.up))|runeforge.chaos_theory&buff.chaos_theory.down
+# Without Chaos Theory, Blade Dance with First Blood or at 3+ (2+ with Trail of Ruin) targets
+actions+=/variable,name=blade_dance,if=!runeforge.chaos_theory,value=talent.first_blood.enabled|spell_targets.blade_dance1>=(3-talent.trail_of_ruin.enabled)
+# With Chaos Theory, Blade Dance when the buff is down, with First Blood at 2+ (1+ with Trail of Ruin) or with Essence Break at 4+ (3+ with Trail of Ruin) targets
+actions+=/variable,name=blade_dance,if=runeforge.chaos_theory,value=buff.chaos_theory.down|talent.first_blood.enabled&spell_targets.blade_dance1>=(2-talent.trail_of_ruin.enabled)|!talent.cycle_of_hatred.enabled&spell_targets.blade_dance1>=(4-talent.trail_of_ruin.enabled)
 actions+=/variable,name=pooling_for_meta,value=!talent.demonic.enabled&cooldown.metamorphosis.remains<6&fury.deficit>30
 actions+=/variable,name=pooling_for_blade_dance,value=variable.blade_dance&(fury<75-talent.first_blood.enabled*20)
 actions+=/variable,name=pooling_for_eye_beam,value=talent.demonic.enabled&!talent.blind_fury.enabled&cooldown.eye_beam.remains<(gcd.max*2)&fury.deficit>20
@@ -48,13 +52,13 @@ actions+=/call_action_list,name=essence_break,if=talent.essence_break.enabled&(v
 actions+=/run_action_list,name=demonic,if=talent.demonic.enabled
 actions+=/run_action_list,name=normal
 
-actions.cooldown=metamorphosis,if=!(talent.demonic.enabled|variable.pooling_for_meta)&(!covenant.venthyr.enabled|!dot.sinful_brand.ticking)|target.time_to_die<25
+actions.cooldown=metamorphosis,if=!(talent.demonic.enabled|variable.pooling_for_meta)&cooldown.eye_beam.remains>20&(!covenant.venthyr.enabled|!dot.sinful_brand.ticking)|fight_remains<25
 actions.cooldown+=/metamorphosis,if=talent.demonic.enabled&(cooldown.eye_beam.remains>20&(!variable.blade_dance|cooldown.blade_dance.remains>gcd.max))&(!covenant.venthyr.enabled|!dot.sinful_brand.ticking)
 actions.cooldown+=/sinful_brand,if=!dot.sinful_brand.ticking
 actions.cooldown+=/the_hunt,if=!talent.demonic.enabled&!variable.waiting_for_momentum|buff.furious_gaze.up
 actions.cooldown+=/fodder_to_the_flame
-actions.cooldown+=/elysian_decree
-actions.cooldown+=/potion,if=buff.metamorphosis.remains>25|target.time_to_die<60
+actions.cooldown+=/elysian_decree,if=(active_enemies>desired_targets|raid_event.adds.in>30)
+actions.cooldown+=/potion,if=buff.metamorphosis.remains>25|fight_remains<60
 # Default fallback for usable items.
 actions.cooldown+=/use_items,if=buff.metamorphosis.up
 
@@ -89,10 +93,9 @@ actions.normal+=/death_sweep,if=variable.blade_dance
 actions.normal+=/immolation_aura
 actions.normal+=/glaive_tempest,if=!variable.waiting_for_momentum&(active_enemies>desired_targets|raid_event.adds.in>10)
 actions.normal+=/throw_glaive,if=conduit.serrated_glaive.enabled&cooldown.eye_beam.remains<6&!buff.metamorphosis.up&!debuff.exposed_wound.up
-actions.normal+=/eye_beam,if=active_enemies>1&(!raid_event.adds.exists|raid_event.adds.up)&!variable.waiting_for_momentum
+actions.normal+=/eye_beam,if=!variable.waiting_for_momentum&(active_enemies>desired_targets|raid_event.adds.in>15)
 actions.normal+=/blade_dance,if=variable.blade_dance
 actions.normal+=/felblade,if=fury.deficit>=40
-actions.normal+=/eye_beam,if=!talent.blind_fury.enabled&!variable.waiting_for_essence_break&raid_event.adds.in>cooldown
 actions.normal+=/annihilation,if=(talent.demon_blades.enabled|!variable.waiting_for_momentum|fury.deficit<30|buff.metamorphosis.remains<5)&!variable.pooling_for_blade_dance&!variable.waiting_for_essence_break
 actions.normal+=/chaos_strike,if=(talent.demon_blades.enabled|!variable.waiting_for_momentum|fury.deficit<30)&!variable.pooling_for_meta&!variable.pooling_for_blade_dance&!variable.waiting_for_essence_break
 actions.normal+=/eye_beam,if=talent.blind_fury.enabled&raid_event.adds.in>cooldown
@@ -104,29 +107,30 @@ actions.normal+=/fel_rush,if=movement.distance>15|(buff.out_of_range.up&!talent.
 actions.normal+=/vengeful_retreat,if=movement.distance>15
 actions.normal+=/throw_glaive,if=talent.demon_blades.enabled
 
-head=vicious_surge_faceguard,id=180106,bonus_id=6807/1498
-neck=azurevenom_choker,id=180115,bonus_id=6807/1498
-shoulders=umbrahide_pauldrons,id=172319,bonus_id=6649/6650/6716/7052/1487
-back=drape_of_twisted_loyalties,id=180123,bonus_id=6807/1498
-chest=animasplattered_hide,id=178835,bonus_id=6807/1498,enchant=eternal_stats
-wrists=bands_of_the_undergrowth,id=178702,bonus_id=6807/1498
-hands=gloves_of_obscure_rituals,id=178757,bonus_id=6807/1498
-waist=girdle_of_shattered_dreams,id=178805,bonus_id=6807/1498
-legs=abyssal_disharmony_breeches,id=180108,bonus_id=6807/1498
-feet=sinsoaked_waders,id=178837,bonus_id=6807/1498,enchant=eternal_agility
-finger1=arachnid_cipher_ring,id=178933,bonus_id=6807/1498,enchant=tenet_of_haste
-finger2=entwined_gorger_tendril,id=178848,bonus_id=6807/1498,enchant=tenet_of_haste
-trinket1=phial_of_putrefaction,id=178771,bonus_id=6807/1498,enchant=shadowcore_oil
-trinket2=overcharged_anima_battery,id=180116,bonus_id=6807/1498,enchant=shadowcore_oil
-main_hand=poxstorm_longsword_of_pestilence,id=178754,bonus_id=6805/1498,enchant=celestial_guidance
-off_hand=poxstorm_longsword_of_pestilence,id=178754,bonus_id=6805/1498,enchant=celestial_guidance
+head=vicious_surge_faceguard,id=180106,bonus_id=6807/1498/6646
+neck=azurevenom_choker,id=180115,bonus_id=6807/1498/6646
+shoulders=far_travelers_shoulderpads,id=179344,bonus_id=6807/1498/6646
+back=drape_of_twisted_loyalties,id=180123,bonus_id=6807/1498/6646
+chest=animasplattered_hide,id=178835,bonus_id=6807/1498/6646,enchant=eternal_stats
+wrists=bands_of_the_undergrowth,id=178702,bonus_id=6807/1498/6646
+hands=umbrahide_gauntlets,id=172316,bonus_id=6649/6650/6716/7050/1487
+waist=girdle_of_shattered_dreams,id=178805,bonus_id=6807/1498/6646
+legs=abyssal_disharmony_breeches,id=180108,bonus_id=6807/1498/6646
+feet=sinsoaked_waders,id=178837,bonus_id=6807/1498/6646,enchant=eternal_agility
+finger1=arachnid_cipher_ring,id=178933,bonus_id=6807/1498/6646,enchant=tenet_of_haste
+finger2=entwined_gorger_tendril,id=178848,bonus_id=6807/1498/6646,enchant=tenet_of_haste
+trinket1=phial_of_putrefaction,id=178771,bonus_id=6807/1498/6646
+trinket2=overcharged_anima_battery,id=180116,bonus_id=6807/1498/6646
+main_hand=poxstorm_longsword_of_pestilence,id=178754,bonus_id=6807/1498/6646,enchant=celestial_guidance
+off_hand=poxstorm_longsword_of_pestilence,id=178754,bonus_id=6807/1498/6646,enchant=celestial_guidance
 
 # Gear Summary
 # gear_ilvl=184.38
 # gear_agility=597
 # gear_stamina=857
+# gear_attack_power=40
 # gear_crit_rating=516
-# gear_haste_rating=390
+# gear_haste_rating=355
 # gear_mastery_rating=42
-# gear_versatility_rating=424
-# gear_armor=479
+# gear_versatility_rating=459
+# gear_armor=478

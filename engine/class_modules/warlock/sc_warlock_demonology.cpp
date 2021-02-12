@@ -465,8 +465,8 @@ struct implosion_t : public demonology_spell_t
   {
     parse_options( options_str );
     add_child( explosion );
-    // Travel speed is not in spell data, in game test appears to be 40 yds/sec
-    travel_speed = 40;
+    // Travel speed is not in spell data, in game test appears to be 65 yds/sec as of 2020-12-04
+    travel_speed = 65;
   }
 
   bool ready() override
@@ -482,7 +482,10 @@ struct implosion_t : public demonology_spell_t
 
   void execute() override
   {
-    warlock_spell_t::execute();
+    demonology_spell_t::execute();
+
+    p()->buffs.implosive_potential->expire();
+    p()->buffs.implosive_potential_small->expire();
 
     auto imps_consumed = p()->warlock_pet_list.wild_imps.n_active_pets();
 
@@ -499,7 +502,10 @@ struct implosion_t : public demonology_spell_t
         imp->interrupt();
 
         // Imps launched with Implosion appear to be staggered and snapshot when they impact
-        make_event( sim, 100_ms * launch_counter + this->travel_time(), [ ex, tar, imp ] {
+        // 2020-12-04: Implosion may have been made quicker in Shadowlands, too fast to easily discern with combat log
+        // Going to set the interval to 10 ms, which should keep all but the most extreme imp counts from bleeding into the next GCD
+        // TODO: There's an awkward possibility of Implosion seeming "ready" after casting it if all the imps have not imploded yet. Find a workaround
+        make_event( sim, 10_ms * launch_counter + this->travel_time(), [ ex, tar, imp ] {
           if ( imp && !imp->is_sleeping() )
           {
             ex->casts_left = ( imp->resources.current[ RESOURCE_ENERGY ] / 20 );
@@ -519,6 +525,8 @@ struct implosion_t : public demonology_spell_t
 
     if ( p()->legendary.implosive_potential.ok() && target_list().size() >= as<size_t>( p()->legendary.implosive_potential->effectN( 1 ).base_value() ) )
       p()->buffs.implosive_potential->trigger( imps_consumed );
+    else if ( p()->legendary.implosive_potential.ok() )
+      p()->buffs.implosive_potential_small->trigger( imps_consumed );
   }
 };
 
@@ -718,11 +726,13 @@ struct power_siphon_t : public demonology_spell_t
 
     range::sort(
         imps, []( const pets::demonology::wild_imp_pet_t* imp1, const pets::demonology::wild_imp_pet_t* imp2 ) {
-          double lv = imp1->resources.current[ RESOURCE_ENERGY ], rv = imp2->resources.current[ RESOURCE_ENERGY ];
+          double lv = imp1->resources.current[ RESOURCE_ENERGY ];
+          double rv = imp2->resources.current[ RESOURCE_ENERGY ];
 
           if ( lv == rv )
           {
-            timespan_t lr = imp1->expiration->remains(), rr = imp2->expiration->remains();
+            timespan_t lr = imp1->expiration->remains();
+            timespan_t rr = imp2->expiration->remains();
             if ( lr == rr )
             {
               return imp1->actor_spawn_index < imp2->actor_spawn_index;
@@ -907,8 +917,8 @@ struct summon_random_demon_t : public demonology_spell_t
     wrathguards        = 5,
     vicious_hellhounds = 6,
     illidari_satyrs    = 7,
-    prince_malchezaar  = 8,
-    eyes_of_guldan     = 9,
+    eyes_of_guldan     = 8,
+    prince_malchezaar  = 9,
   };
 
   timespan_t summon_duration;
@@ -990,7 +1000,7 @@ private:
    */
   random_pet_type roll_random_pet()
   {
-    int demon_int = rng().range( 10 );
+    int demon_int = rng().range( 9 ); //Malchezaar is disabled in instances. TODO: Add option to reenable?
     int rare_check;
     if ( demon_int > 7 )
     {
@@ -1124,6 +1134,12 @@ void warlock_t::create_buffs_demonology()
           ->set_default_value( legendary.implosive_potential->effectN( 2 ).percent() )
           ->set_max_stack( 40 ); //Using the other wild imp simc max for now
 
+  //For ease of use and tracking, the lesser version will have (small) appended to a separate buff
+  buffs.implosive_potential_small = make_buff<buff_t>(this, "implosive_potential_small", find_spell(337139))
+          ->set_pct_buff_type( STAT_PCT_BUFF_HASTE )
+          ->set_default_value( legendary.implosive_potential->effectN( 3 ).percent() )
+          ->set_max_stack( 40 ); //Using the other wild imp simc max for now
+
   buffs.dread_calling = make_buff<buff_t>( this, "dread_calling", find_spell( 342997 ) )
                             ->set_default_value( legendary.grim_inquisitors_dread_calling->effectN( 1 ).percent() );
 
@@ -1152,7 +1168,7 @@ void warlock_t::vision_of_perfection_proc_demo()
 {
   timespan_t summon_duration = find_spell( 265187 )->duration() * vision_of_perfection_multiplier;
 
-  warlock_pet_list.demonic_tyrants.spawn( summon_duration, 1u );
+  warlock_pet_list.demonic_tyrants.spawn( summon_duration, 1U );
 
   auto essence         = find_azerite_essence( "Vision of Perfection" );
   timespan_t extension = timespan_t::from_seconds(
@@ -1308,12 +1324,12 @@ void warlock_t::create_apl_demonology()
   def->add_action( "shadow_bolt" );
 
   prep->add_action( "doom,line_cd=30" );
-  prep->add_action( "demonic_strength,if=!talent.demonic_consumption.enabled" );
   prep->add_action( "nether_portal" );
   prep->add_action( "grimoire_felguard" );
   prep->add_action( "summon_vilefiend" );
   prep->add_action( "call_dreadstalkers" );
   prep->add_action( "demonbolt,if=buff.demonic_core.up&soul_shard<4&(talent.demonic_consumption.enabled|buff.nether_portal.down)" );
+  prep->add_action( "soul_strike,if=soul_shard<5-4*buff.nether_portal.up" );
   prep->add_action( "shadow_bolt,if=soul_shard<5-4*buff.nether_portal.up" );
   prep->add_action( "variable,name=tyrant_ready,value=1" );
   prep->add_action( "hand_of_guldan" );
@@ -1324,6 +1340,7 @@ void warlock_t::create_apl_demonology()
   sum->add_action( "call_dreadstalkers" );
   sum->add_action( "hand_of_guldan" );
   sum->add_action( "demonbolt,if=buff.demonic_core.up&buff.nether_portal.up&((buff.vilefiend.remains>5|!talent.summon_vilefiend.enabled)&(buff.grimoire_felguard.remains>5|buff.grimoire_felguard.down))" );
+  sum->add_action( "soul_strike,if=buff.nether_portal.up&((buff.vilefiend.remains>5|!talent.summon_vilefiend.enabled)&(buff.grimoire_felguard.remains>5|buff.grimoire_felguard.down))" );
   sum->add_action( "shadow_bolt,if=buff.nether_portal.up&((buff.vilefiend.remains>5|!talent.summon_vilefiend.enabled)&(buff.grimoire_felguard.remains>5|buff.grimoire_felguard.down))" );
   sum->add_action( "variable,name=tyrant_ready,value=!cooldown.summon_demonic_tyrant.ready" );
   sum->add_action( "summon_demonic_tyrant" );

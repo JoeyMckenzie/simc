@@ -7,13 +7,14 @@ role=attack
 position=back
 talents=3210021
 covenant=kyrian
-soulbind=combat_meditation/lethal_poisons:7/wellplaced_steel:7
+soulbind=pelagos,combat_meditation/lethal_poisons:7/wellplaced_steel:7
 
 # Default consumables
 potion=phantom_fire
 flask=spectral_flask_of_power
 food=feast_of_gluttonous_hedonism
 augmentation=veiled
+temporary_enchant=main_hand:shaded_sharpening_stone/off_hand:shaded_sharpening_stone
 
 # This default action priority list is automatically created based on your character.
 # It is a attempt to provide you with a action list that is both simple and practicable,
@@ -28,13 +29,15 @@ actions.precombat+=/augmentation
 actions.precombat+=/food
 # Snapshot raid buffed stats before combat begins and pre-potting is done.
 actions.precombat+=/snapshot_stats
-actions.precombat+=/marked_for_death,precombat_seconds=5,if=raid_event.adds.in>15
+actions.precombat+=/marked_for_death,precombat_seconds=10,if=raid_event.adds.in>15
 actions.precombat+=/stealth
 actions.precombat+=/slice_and_dice,precombat_seconds=1
 
 # Executed every time the actor is available.
 # Restealth if possible (no vulnerable enemies in combat)
 actions=stealth
+# Interrupt on cooldown to allow simming interactions with that
+actions+=/kick
 actions+=/variable,name=energy_regen_combined,value=energy.regen+poisoned_bleeds*7%(2*spell_haste)
 actions+=/variable,name=single_target,value=spell_targets.fan_of_knives<2
 actions+=/call_action_list,name=stealthed,if=stealthed.rogue
@@ -57,22 +60,15 @@ actions.cds+=/marked_for_death,if=raid_event.adds.in>30-raid_event.adds.duration
 # Vendetta logical conditionals based on current spec
 actions.cds+=/variable,name=vendetta_nightstalker_condition,value=!talent.nightstalker.enabled|!talent.exsanguinate.enabled|cooldown.exsanguinate.remains<5-2*talent.deeper_stratagem.enabled
 actions.cds+=/vendetta,if=!stealthed.rogue&dot.rupture.ticking&!debuff.vendetta.up&variable.vendetta_nightstalker_condition
-# Vanish with Exsg + Nightstalker: Maximum CP and Exsg ready for next GCD
-actions.cds+=/vanish,if=talent.exsanguinate.enabled&talent.nightstalker.enabled&effective_combo_points>=cp_max_spend&cooldown.exsanguinate.remains<1
-# Vanish with Nightstalker + No Exsg: Maximum CP and Vendetta up
-actions.cds+=/vanish,if=talent.nightstalker.enabled&!talent.exsanguinate.enabled&effective_combo_points>=cp_max_spend&debuff.vendetta.up
-actions.cds+=/pool_resource,for_next=1,extra_amount=45
-actions.cds+=/vanish,if=talent.subterfuge.enabled&!stealthed.rogue&cooldown.garrote.up&(dot.garrote.refreshable|debuff.vendetta.up&dot.garrote.pmultiplier<=1)&combo_points.deficit>=(spell_targets.fan_of_knives>?4)&raid_event.adds.in>12
-# Vanish with Master Assasin: No stealth and no active MA buff, Rupture not in refresh range, during Vendetta+TB
-actions.cds+=/vanish,if=(talent.master_assassin.enabled|runeforge.mark_of_the_master_assassin)&!stealthed.all&master_assassin_remains<=0&!dot.rupture.refreshable&dot.garrote.remains>3&debuff.vendetta.up&debuff.shiv.up
 # Exsanguinate when not stealthed and both Rupture and Garrote are up for long enough.
 actions.cds+=/exsanguinate,if=!stealthed.rogue&(!dot.garrote.refreshable&dot.rupture.remains>4+4*cp_max_spend|dot.rupture.remains*0.5>target.time_to_die)&target.time_to_die>4
 actions.cds+=/shiv,if=dot.rupture.ticking|dot.sepsis.ticking
-actions.cds+=/potion,if=buff.bloodlust.react|debuff.vendetta.up
+actions.cds+=/potion,if=buff.bloodlust.react|fight_remains<30|debuff.vendetta.up
 actions.cds+=/blood_fury,if=debuff.vendetta.up
 actions.cds+=/berserking,if=debuff.vendetta.up
 actions.cds+=/fireblood,if=debuff.vendetta.up
 actions.cds+=/ancestral_call,if=debuff.vendetta.up
+actions.cds+=/call_action_list,name=vanish,if=!stealthed.all&master_assassin_remains=0
 actions.cds+=/use_item,effect_name=gladiators_medallion,if=debuff.vendetta.up
 actions.cds+=/use_item,effect_name=gladiators_badge,if=debuff.vendetta.up
 # Default fallback for usable items: Use on cooldown.
@@ -82,13 +78,13 @@ actions.cds+=/use_items
 # Envenom at 4+ (5+ with DS) CP. Immediately on 2+ targets, with Vendetta, or with TB; otherwise wait for some energy. Also wait if Exsg combo is coming up.
 actions.direct=envenom,if=effective_combo_points>=4+talent.deeper_stratagem.enabled&(debuff.vendetta.up|debuff.shiv.up|energy.deficit<=25+variable.energy_regen_combined|!variable.single_target)&(!talent.exsanguinate.enabled|cooldown.exsanguinate.remains>2)
 actions.direct+=/variable,name=use_filler,value=combo_points.deficit>1|energy.deficit<=25+variable.energy_regen_combined|!variable.single_target
-actions.direct+=/serrated_bone_spike,cycle_targets=1,if=buff.slice_and_dice.up&!dot.serrated_bone_spike_dot.ticking|fight_remains<=5|cooldown.serrated_bone_spike.charges_fractional>=2.75|soulbind.lead_by_example.enabled&!buff.lead_by_example.up
+actions.direct+=/serrated_bone_spike,cycle_targets=1,if=master_assassin_remains=0&(buff.slice_and_dice.up&!dot.serrated_bone_spike_dot.ticking|fight_remains<=5|cooldown.serrated_bone_spike.charges_fractional>=2.75|soulbind.lead_by_example.enabled&!buff.lead_by_example.up)
 # Fan of Knives at 19+ stacks of Hidden Blades or against 4+ targets.
 actions.direct+=/fan_of_knives,if=variable.use_filler&(buff.hidden_blades.stack>=19|(!priority_rotation&spell_targets.fan_of_knives>=4+stealthed.rogue))
 # Fan of Knives to apply Deadly Poison if inactive on any target at 3 targets.
 actions.direct+=/fan_of_knives,target_if=!dot.deadly_poison_dot.ticking,if=variable.use_filler&spell_targets.fan_of_knives>=3
 actions.direct+=/echoing_reprimand,if=variable.use_filler&cooldown.vendetta.remains>10
-actions.direct+=/ambush,if=variable.use_filler
+actions.direct+=/ambush,if=variable.use_filler&(master_assassin_remains=0|buff.blindside.up)
 # Tab-Mutilate to apply Deadly Poison at 2 targets
 actions.direct+=/mutilate,target_if=!dot.deadly_poison_dot.ticking,if=variable.use_filler&spell_targets.fan_of_knives=2
 actions.direct+=/mutilate,if=variable.use_filler
@@ -128,30 +124,44 @@ actions.stealthed+=/garrote,target_if=min:remains,if=talent.subterfuge.enabled&(
 # Subterfuge + Exsg on 1T: Refresh Garrote at the end of stealth to get max duration before Exsanguinate
 actions.stealthed+=/pool_resource,for_next=1
 actions.stealthed+=/garrote,if=talent.subterfuge.enabled&talent.exsanguinate.enabled&active_enemies=1&buff.subterfuge.remains<1.3
+actions.stealthed+=/mutilate,if=talent.subterfuge.enabled&combo_points<=3
 
-head=sadists_sinister_mask,id=182980,bonus_id=7187/1498
-neck=nobles_birthstone_pendant,id=183039,bonus_id=7187/1498
+# Vanish
+# Finish with max CP for Nightstalker, unless using Deathly Shadows
+actions.vanish=variable,name=nightstalker_cp_condition,value=(!runeforge.deathly_shadows&effective_combo_points>=cp_max_spend)|(runeforge.deathly_shadows&combo_points<2)
+# Vanish with Exsg + Nightstalker: Maximum CP and Exsg ready for next GCD
+actions.vanish+=/vanish,if=talent.exsanguinate.enabled&talent.nightstalker.enabled&variable.nightstalker_cp_condition&cooldown.exsanguinate.remains<1
+# Vanish with Nightstalker + No Exsg: Maximum CP and Vendetta up
+actions.vanish+=/vanish,if=talent.nightstalker.enabled&!talent.exsanguinate.enabled&variable.nightstalker_cp_condition&debuff.vendetta.up
+actions.vanish+=/pool_resource,for_next=1,extra_amount=45
+actions.vanish+=/vanish,if=talent.subterfuge.enabled&cooldown.garrote.up&(dot.garrote.refreshable|debuff.vendetta.up&dot.garrote.pmultiplier<=1)&combo_points.deficit>=(spell_targets.fan_of_knives>?4)&raid_event.adds.in>12
+# Vanish with Master Assasin: No stealth and no active MA buff, Rupture not in refresh range, during Vendetta+TB
+actions.vanish+=/vanish,if=(talent.master_assassin.enabled|runeforge.mark_of_the_master_assassin)&!dot.rupture.refreshable&dot.garrote.remains>3&debuff.vendetta.up&debuff.shiv.up
+
+head=sadists_sinister_mask,id=182980,bonus_id=7187/1498/6935,gem_id=173127
+neck=azurevenom_choker,id=180115,bonus_id=6536/1540/6646/6935,gem_id=173127
 shoulders=wicked_flankers_gorget,id=183029,bonus_id=7187/1498
 back=crest_of_the_legionnaire_general,id=183032,bonus_id=7187/1498
 chest=corset_of_the_deft_duelist,id=182989,bonus_id=7187/1498,enchant=eternal_stats
-wrists=precisely_calibrated_chronometer,id=183019,bonus_id=7187/1498
+wrists=precisely_calibrated_chronometer,id=183019,bonus_id=7187/1498/6935,gem_id=173127
 hands=bleakwing_assassins_grips,id=183007,bonus_id=7187/1498
-waist=spellwoven_tourniquet,id=182995,bonus_id=7187/1498
+waist=spellwoven_tourniquet,id=182995,bonus_id=7187/1498/6935,gem_id=173127
 legs=umbrahide_leggings,id=172318,bonus_id=6647/6649/6758/7117/1532
 feet=enchanted_toetappers,id=183030,bonus_id=7187/1498,enchant=eternal_agility
-finger1=ritualists_treasured_ring,id=183037,bonus_id=7187/1498,enchant=tenet_of_versatility
-trinket1=stone_legion_heraldry,id=184027,bonus_id=7187/1498,enchant=20attackpower
-trinket2=skulkers_wing,id=184016,bonus_id=7187/1498,enchant=20attackpower
-main_hand=faithful_sidearm,id=177865,bonus_id=7187/1524,enchant=celestial_guidance
-off_hand=faithful_sidearm,id=177865,bonus_id=7187/1524,enchant=sinful_revelation
+finger1=arachnid_cipher_ring,id=178933,bonus_id=6536/1540/6646/6935,gem_id=173127,enchant=tenet_of_versatility
+finger2=ritualists_treasured_ring,id=183037,bonus_id=7187/1498/6935,gem_id=173127,enchant=tenet_of_versatility
+trinket1=phial_of_putrefaction,id=178771,bonus_id=6536/1540/6646
+trinket2=dreadfire_vessel,id=184030,bonus_id=7187/1498
+main_hand=faithful_sidearm,id=177865,bonus_id=7187/1531,enchant=celestial_guidance
+off_hand=faithful_sidearm,id=177865,bonus_id=7187/1531,enchant=sinful_revelation
 
 # Gear Summary
-# gear_ilvl=228.47
-# gear_agility=885
-# gear_stamina=1426
+# gear_ilvl=229.19
+# gear_agility=891
+# gear_stamina=1524
 # gear_attack_power=40
-# gear_crit_rating=401
-# gear_haste_rating=626
-# gear_mastery_rating=233
-# gear_versatility_rating=344
+# gear_crit_rating=717
+# gear_haste_rating=714
+# gear_mastery_rating=71
+# gear_versatility_rating=432
 # gear_armor=609

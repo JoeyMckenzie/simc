@@ -152,7 +152,6 @@ public:
     action_t* necrolord_shield_of_the_righteous;
     action_t* divine_toll;
     action_t* seasons[NUM_SEASONS];
-    action_t* blessing_of_summer_proc;
 
     // Conduit stuff
     action_t* virtuous_command;
@@ -209,10 +208,6 @@ public:
 
     // Covenants
     buff_t* vanquishers_hammer;
-    buff_t* blessing_of_summer;
-    buff_t* blessing_of_autumn;
-    buff_t* blessing_of_winter;
-    buff_t* blessing_of_spring;
 
     // Legendaries
     buff_t* vanguards_momentum;
@@ -532,7 +527,6 @@ public:
 
   // player stat functions
   virtual double    composite_player_multiplier( school_e ) const override;
-  virtual double    composite_player_heal_multiplier( const action_state_t* s ) const override;
   virtual double    composite_attribute_multiplier( attribute_e attr ) const override;
   virtual double    composite_attack_power_multiplier() const override;
   virtual double    composite_bonus_armor() const override;
@@ -557,12 +551,13 @@ public:
   virtual double 	  composite_player_target_multiplier ( player_t *target, school_e school ) const override;
   virtual double    composite_base_armor_multiplier() const override;
 
-  virtual double    resource_gain( resource_e resource_type, double amount, gain_t* g = nullptr, action_t* a = nullptr ) override;
-  virtual double    resource_loss( resource_e resource_type, double amount, gain_t* g = nullptr, action_t* a = nullptr ) override;
+  virtual double resource_gain( resource_e resource_type, double amount, gain_t* source = nullptr,
+                                action_t* action = nullptr ) override;
+  virtual double resource_loss( resource_e resource_type, double amount, gain_t* source = nullptr,
+                                action_t* action = nullptr ) override;
 
   // combat outcome functions
   virtual void      assess_damage( school_e, result_amount_type, action_state_t* ) override;
-  virtual void      assess_heal( school_e, result_amount_type, action_state_t* ) override;
   virtual void      target_mitigation( school_e, result_amount_type, action_state_t* ) override;
 
   virtual void      invalidate_cache( cache_e ) override;
@@ -599,6 +594,8 @@ public:
   std::string default_flask() const override;
   std::string default_food() const override;
   std::string default_rune() const override;
+  std::string default_temporary_enchant() const override;
+
   void apply_affecting_auras( action_t& action ) override;
 
   void      create_buffs_retribution();
@@ -698,7 +695,9 @@ namespace buffs {
   {
     execution_sentence_debuff_t( paladin_td_t* td ) :
       buff_t( *td, "execution_sentence", debug_cast<paladin_t*>( td -> source ) -> talents.execution_sentence ),
-      accumulated_damage( 0.0 ) {}
+      accumulated_damage( 0.0 ) {
+      set_cooldown( 0_ms ); // handled by the ability
+    }
 
     void reset() override
     {
@@ -886,20 +885,12 @@ public:
             p() -> active.reckoning -> schedule_execute();
           }
         }
-
-        if ( ab::callbacks && p() -> buffs.blessing_of_summer -> up() )
-        {
-          if ( p() -> rng().roll( p() -> buffs.blessing_of_summer -> data().proc_chance() ) )
-          {
-            double amt = s -> result_amount;
-            double multiplier = p() -> buffs.blessing_of_summer -> data().effectN( 1 ).percent();
-            amt *= multiplier;
-            p() -> active.blessing_of_summer_proc -> base_dd_max = p() -> active.blessing_of_summer_proc -> base_dd_min = amt;
-            p() -> active.blessing_of_summer_proc -> set_target( s -> target );
-            p() -> active.blessing_of_summer_proc -> schedule_execute();
-          }
-        }
       }
+
+
+      paladin_td_t* td = this -> td( s -> target );
+      if ( td -> debuff.reckoning -> up() )
+        td -> debuff.reckoning -> expire();
     }
   }
 
@@ -981,6 +972,17 @@ public:
   {
     if ( cd_waste ) cd_waste -> add( cd, ab::time_to_execute );
     ab::update_ready( cd );
+  }
+
+  virtual void assess_damage( result_amount_type typ, action_state_t* s ) override
+  {
+    ab::assess_damage( typ, s );
+
+    paladin_td_t* td = this -> td( s -> target );
+    if ( td -> debuff.execution_sentence -> check() )
+    {
+      td -> debuff.execution_sentence -> accumulate_damage( s );
+    }
   }
 };
 
@@ -1206,7 +1208,12 @@ struct holy_power_consumer_t : public Base
       p -> buffs.relentless_inquisitor_azerite -> trigger( num_stacks );
 
     if ( p -> legendary.relentless_inquisitor -> ok() )
+    {
       p -> buffs.relentless_inquisitor -> trigger();
+      // 2020-12-06 Shining Light and Divine Purpose proc 2 stacks of Relentless Inquisitor
+      if ( p -> bugs && ( p -> buffs.divine_purpose -> up() || ( is_wog && p -> buffs.shining_light_free -> up() )))
+        p -> buffs.relentless_inquisitor -> trigger();
+    }
 
     if ( p -> buffs.crusade -> check() )
     {

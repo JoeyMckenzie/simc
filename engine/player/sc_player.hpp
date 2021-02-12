@@ -363,6 +363,7 @@ struct player_t : public actor_t
 
   // Gear
   std::string items_str, meta_gem_str, potion_str, flask_str, food_str, rune_str;
+  std::string temporary_enchant_str;
   std::vector<item_t> items;
   gear_stats_t gear, enchant; // Option based stats
   gear_stats_t total_gear; // composite of gear, enchant and for non-pets sim -> enchant
@@ -504,6 +505,13 @@ struct player_t : public actor_t
     buff_t* focus_magic; // Mage talent
     buff_t* power_infusion; // Priest spell
 
+    // 9.0 class covenant buffs
+    buff_t* benevolent_faerie; // Night Fae Priest spell
+    buff_t* blessing_of_summer; // Night Fae Paladin spell
+    buff_t* blessing_of_autumn; // Night Fae Paladin spell
+    buff_t* blessing_of_winter; // Night Fae Paladin spell
+    buff_t* blessing_of_spring; // Night Fae Paladin spell
+
     // 9.0 Soulbinds
     buff_t* wild_hunt_tactics;  // night_fae/korayn - dummy buff used to quickly check if soulbind is enabled
     buff_t* volatile_solvent_damage; // necrolord/marileth - elemental (magic) and giant (physical) % damage done buffs
@@ -536,6 +544,11 @@ struct player_t : public actor_t
   {
     bool focus_magic;
     std::vector<timespan_t> power_infusion;
+    std::vector<timespan_t> benevolent_faerie;
+    std::vector<timespan_t> blessing_of_summer;
+    std::vector<timespan_t> blessing_of_autumn;
+    std::vector<timespan_t> blessing_of_winter;
+    std::vector<timespan_t> blessing_of_spring;
   } external_buffs;
 
   struct gains_t
@@ -678,7 +691,8 @@ public:
   void add_option( std::unique_ptr<option_t> o );
   void parse_talents_numbers( util::string_view talent_string );
   bool parse_talents_armory( util::string_view talent_string );
-  bool parse_talents_armory2( util::string_view talent_string );
+  bool parse_talents_armory2( util::string_view talent_url );
+  void parse_temporary_enchants();
 
   bool is_moving() const;
   double composite_block_dr( double extra_block ) const;
@@ -695,8 +709,6 @@ public:
   bool dual_wield() const
   { return main_hand_weapon.type != WEAPON_NONE && off_hand_weapon.type != WEAPON_NONE; }
   bool has_shield_equipped() const;
-  /// Figure out if healing should be recorded
-  bool record_healing() const;
   specialization_e specialization() const
   { return _spec; }
   const char* primary_tree_name() const;
@@ -743,9 +755,10 @@ public:
   const spell_data_t* find_soulbind_spell( util::string_view name ) const;
   const spell_data_t* find_covenant_spell( util::string_view name ) const;
 
-  const spell_data_t* find_racial_spell( util::string_view name, race_e s = RACE_NONE ) const;
+  const spell_data_t* find_racial_spell( util::string_view name, race_e r = RACE_NONE ) const;
   const spell_data_t* find_class_spell( util::string_view name, specialization_e s = SPEC_NONE ) const;
-  const spell_data_t* find_rank_spell( util::string_view name, util::string_view desc, specialization_e s = SPEC_NONE ) const;
+  const spell_data_t* find_rank_spell( util::string_view name, util::string_view rank,
+                                       specialization_e s = SPEC_NONE ) const;
   const spell_data_t* find_pet_spell( util::string_view name ) const;
   const spell_data_t* find_talent_spell( util::string_view name, specialization_e s = SPEC_NONE, bool name_tokenized = false, bool check_validity = true ) const;
   const spell_data_t* find_specialization_spell( util::string_view name, specialization_e s = SPEC_NONE ) const;
@@ -794,10 +807,7 @@ public:
   virtual void override_talent( util::string_view override_str );
   virtual void init_meta_gem();
   virtual void init_resources( bool force = false );
-  virtual std::string init_use_item_actions( const std::string& append = std::string() );
-  virtual std::string init_use_profession_actions( const std::string& append = std::string() );
-  virtual std::string init_use_racial_actions( const std::string& append = std::string() );
-  virtual std::vector<std::string> get_item_actions( const std::string& options = std::string() );
+  virtual std::vector<std::string> get_item_actions();
   virtual std::vector<std::string> get_profession_actions();
   virtual std::vector<std::string> get_racial_actions();
   virtual void init_target();
@@ -859,6 +869,8 @@ public:
         return item_database::curve_point_value( *dbc, DIMINISHING_RETURN_TERTIARY_CR_CURVE, value * 100.0 ) / 100.0;
       case RATING_MASTERY:
         return item_database::curve_point_value( *dbc, DIMINISHING_RETURN_SECONDARY_CR_CURVE, value );
+      case RATING_MITIGATION_VERSATILITY:
+        return item_database::curve_point_value( *dbc, DIMINISHING_RETURN_VERS_MITIG_CR_CURVE, value * 100.0 ) / 100.0;
       default:
         // Note, curve uses %-based values, not values divided by 100
         return item_database::curve_point_value( *dbc, DIMINISHING_RETURN_SECONDARY_CR_CURVE, value * 100.0 ) / 100.0;
@@ -988,22 +1000,26 @@ public:
   virtual void clear_debuffs();
   virtual void trigger_ready();
   virtual void schedule_ready( timespan_t delta_time = timespan_t::zero(), bool waiting = false );
-  virtual void schedule_off_gcd_ready( timespan_t delta_time = timespan_t::from_millis( 100 ) );
-  virtual void schedule_cwc_ready( timespan_t delta_time = timespan_t::from_millis( 100 ) );
+  virtual void schedule_off_gcd_ready( timespan_t delta_time = timespan_t::min() );
+  virtual void schedule_cwc_ready( timespan_t delta_time = timespan_t::min() );
   virtual void arise();
   virtual void demise();
   virtual timespan_t available() const
-  { return timespan_t::from_seconds( 0.1 ); }
+  { return rng().gauss( 100_ms, 10_ms ); }
   virtual action_t* select_action( const action_priority_list_t&, execute_type type = execute_type::FOREGROUND, const action_t* context = nullptr );
   virtual action_t* execute_action();
 
   virtual void   regen( timespan_t periodicity = timespan_t::from_seconds( 0.25 ) );
-  virtual double resource_gain( resource_e resource_type, double amount, gain_t* g = nullptr, action_t* a = nullptr );
-  virtual double resource_loss( resource_e resource_type, double amount, gain_t* g = nullptr, action_t* a = nullptr );
-  virtual void   recalculate_resource_max( resource_e resource_type, gain_t* g = nullptr );
+  virtual double resource_gain( resource_e resource_type, double amount, gain_t* source = nullptr,
+                                action_t* action = nullptr );
+  virtual double resource_loss( resource_e resource_type, double amount, gain_t* source = nullptr,
+                                action_t* action = nullptr );
+  virtual void recalculate_resource_max( resource_e resource_type, gain_t* source = nullptr );
   // Check whether the player has enough of a given resource.
   // The caller needs to ensure current resources are up to date (in particular with dynamic regen).
   virtual bool   resource_available( resource_e resource_type, double cost ) const;
+  /// Figure out if healing should be recorded
+  virtual bool record_healing() const;
   virtual resource_e primary_resource() const
   { return RESOURCE_NONE; }
   virtual role_e   primary_role() const;
@@ -1030,9 +1046,9 @@ public:
   virtual void  summon_pet( util::string_view name, timespan_t duration = timespan_t::zero() );
   virtual void dismiss_pet( util::string_view name );
 
-  virtual std::unique_ptr<expr_t> create_expression( util::string_view name );
-  virtual std::unique_ptr<expr_t> create_action_expression( action_t&, util::string_view name );
-  virtual std::unique_ptr<expr_t> create_resource_expression( util::string_view name );
+  virtual std::unique_ptr<expr_t> create_expression( util::string_view expression_str );
+  virtual std::unique_ptr<expr_t> create_action_expression( action_t&, util::string_view expression_str );
+  virtual std::unique_ptr<expr_t> create_resource_expression( util::string_view expression_str );
 
   virtual void create_options();
   void recreate_talent_str( talent_format format = talent_format::NUMBERS );
@@ -1107,6 +1123,8 @@ public:
   virtual std::string default_food() const
   { return ""; }
   virtual std::string default_rune() const
+  { return ""; }
+  virtual std::string default_temporary_enchant() const
   { return ""; }
 
   /**
